@@ -308,7 +308,9 @@ export const MyCoursesPage: React.FC<MyCoursesPageProps> = ({
 
       {editingCourse && (
         <EditCourseModal
-          course={editingCourse}
+          isOpen={true}
+          initialTitle={editingCourse.title}
+          initialDescription={editingCourse.description}
           onClose={() => setEditingCourse(null)}
           onSave={handleSaveCourseEdits}
         />

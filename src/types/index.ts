@@ -67,23 +67,40 @@ export interface ContentSection {
   codeLanguage?: string;
 }
 
+export interface KeyDefinition {
+  term: string;
+  definition: string;
+  explanation?: string;
+}
+
 export interface ChapterContent {
   introduction: string;
+  definitions?: KeyDefinition[];
   sections: ContentSection[];
   keyTakeaways: string[];
+  realWorldApplications?: string[];
+  commonMistakes?: string[];
+  diagram?: string;
+  summary?: string;
 }
 
 export interface EducationalVideo {
   id: string;
+  videoId?: string;
   title: string;
   channel: string;
+  channelTitle?: string;
   duration?: string;
   topic?: string;
   relevanceScore: number; // 0 to 100
   embedUrl: string;
   thumbnailUrl?: string;
   isEmbeddable?: boolean;
+  matchReason?: string;
+  matchCategory?: 'excellent' | 'good' | 'fair';
 }
+
+export type VideoRecommendation = EducationalVideo;
 
 export interface CourseChapter {
   id?: string;
@@ -91,10 +108,14 @@ export interface CourseChapter {
   title: string;
   description: string;
   duration: string;
+  learningObjectives?: string[];
+  importantConcepts?: string[];
+  prerequisites?: string[];
   videoId?: string;
   videoTitle?: string;
   videoChannel?: string;
   relevanceScore?: number;
+  videoMatchReason?: string;
   alternativeVideos?: EducationalVideo[];
   completed: boolean;
   isUnlocked: boolean; // Locked until previous lecture is passed with >= 75%

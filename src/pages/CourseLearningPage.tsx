@@ -14,8 +14,18 @@ import {
   RotateCcw,
   Sparkles,
   XCircle,
+  Copy,
+  Download,
+  MessageSquare,
+  Send,
+  Video as VideoIcon,
+  HelpCircle,
+  Layers,
+  AlertOctagon,
+  Info,
+  BookOpen,
 } from 'lucide-react';
-import { Course, CourseChapter } from '../types';
+import { Course, CourseChapter, VideoRecommendation } from '../types';
 
 export const CourseLearningPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +35,18 @@ export const CourseLearningPage: React.FC = () => {
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Video switcher & Study notes state
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [switchingVideo, setSwitchingVideo] = useState(false);
+  const [copiedNotes, setCopiedNotes] = useState(false);
+
+  // Embedded AI Tutor state
+  const [showTutorModal, setShowTutorModal] = useState(false);
+  const [tutorQuestion, setTutorQuestion] = useState('');
+  const [tutorStyle, setTutorStyle] = useState<'simple' | 'detailed' | 'practical'>('simple');
+  const [tutorLoading, setTutorLoading] = useState(false);
+  const [tutorChat, setTutorChat] = useState<Array<{ sender: 'user' | 'tutor'; text: string; style?: string }>>([]);
 
   // Assessment State (Strictly 5 MCQs)
   const [mcqAnswers, setMcqAnswers] = useState<Record<string, number>>({});
@@ -82,6 +104,184 @@ export const CourseLearningPage: React.FC = () => {
       setAssessmentResult(null);
     }
   }, [selectedChapterIndex, currentChapter?.id]);
+
+  const handleSelectVideo = async (video: VideoRecommendation) => {
+    if (!course || !currentChapter) return;
+    setSwitchingVideo(true);
+    const chId = currentChapter.id || String(currentChapter.chapterNumber);
+    try {
+      const res = await fetch(`/api/courses/${course.id}/chapters/${chId}/select-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: video.id || video.videoId,
+          title: video.title,
+          channel: video.channel || video.channelTitle,
+          thumbnailUrl: video.thumbnailUrl,
+          score: video.relevanceScore,
+          matchReason: video.matchReason,
+        }),
+      });
+      if (res.ok) {
+        const updatedCourse = await res.json();
+        setCourse(updatedCourse);
+        setShowVideoModal(false);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSwitchingVideo(false);
+    }
+  };
+
+  const handleCopyNotes = () => {
+    if (!currentChapter) return;
+    let text = `# ${course?.title || ''}\n## Day ${currentChapter.chapterNumber}: ${currentChapter.title}\n\n`;
+    text += `${currentChapter.description}\n\n`;
+    if (currentChapter.content?.introduction) {
+      text += `### Overview\n${currentChapter.content.introduction}\n\n`;
+    }
+    if (currentChapter.content?.definitions && currentChapter.content.definitions.length > 0) {
+      text += `### Key Definitions\n`;
+      currentChapter.content.definitions.forEach((d) => {
+        text += `- **${d.term}**: ${d.explanation || d.definition}\n`;
+      });
+      text += `\n`;
+    }
+    if (currentChapter.content?.sections) {
+      currentChapter.content.sections.forEach((s) => {
+        text += `### ${s.title}\n${s.content}\n\n`;
+        if (s.codeSnippet) {
+          text += `\`\`\`\n${s.codeSnippet}\n\`\`\`\n\n`;
+        }
+      });
+    }
+    if (currentChapter.content?.diagram) {
+      text += `### Architecture / Concept Diagram\n\`\`\`\n${currentChapter.content.diagram}\n\`\`\`\n\n`;
+    }
+    if (currentChapter.content?.realWorldApplications && currentChapter.content.realWorldApplications.length > 0) {
+      text += `### Real-World Applications\n`;
+      currentChapter.content.realWorldApplications.forEach((a) => {
+        text += `- ${a}\n`;
+      });
+      text += `\n`;
+    }
+    if (currentChapter.content?.commonMistakes && currentChapter.content.commonMistakes.length > 0) {
+      text += `### Common Mistakes & Pitfalls\n`;
+      currentChapter.content.commonMistakes.forEach((m) => {
+        text += `- ⚠️ ${m}\n`;
+      });
+      text += `\n`;
+    }
+    if (currentChapter.content?.keyTakeaways) {
+      text += `### Key Takeaways\n`;
+      currentChapter.content.keyTakeaways.forEach((k) => {
+        text += `- ✓ ${k}\n`;
+      });
+    }
+
+    navigator.clipboard.writeText(text);
+    setCopiedNotes(true);
+    setTimeout(() => setCopiedNotes(false), 2000);
+  };
+
+  const handleDownloadNotes = () => {
+    if (!currentChapter) return;
+    let markdown = `# ${course?.title || ''}\n## Day ${currentChapter.chapterNumber}: ${currentChapter.title}\n\n`;
+    markdown += `${currentChapter.description}\n\n`;
+    if (currentChapter.content?.introduction) {
+      markdown += `### Overview\n${currentChapter.content.introduction}\n\n`;
+    }
+    if (currentChapter.content?.definitions && currentChapter.content.definitions.length > 0) {
+      markdown += `### Key Definitions\n`;
+      currentChapter.content.definitions.forEach((d) => {
+        markdown += `- **${d.term}**: ${d.explanation || d.definition}\n`;
+      });
+      markdown += `\n`;
+    }
+    if (currentChapter.content?.sections) {
+      currentChapter.content.sections.forEach((s) => {
+        markdown += `### ${s.title}\n${s.content}\n\n`;
+        if (s.codeSnippet) {
+          markdown += `\`\`\`\n${s.codeSnippet}\n\`\`\`\n\n`;
+        }
+      });
+    }
+    if (currentChapter.content?.diagram) {
+      markdown += `### Architecture / Concept Diagram\n\`\`\`\n${currentChapter.content.diagram}\n\`\`\`\n\n`;
+    }
+    if (currentChapter.content?.realWorldApplications && currentChapter.content.realWorldApplications.length > 0) {
+      markdown += `### Real-World Applications\n`;
+      currentChapter.content.realWorldApplications.forEach((a) => {
+        markdown += `- ${a}\n`;
+      });
+      markdown += `\n`;
+    }
+    if (currentChapter.content?.commonMistakes && currentChapter.content.commonMistakes.length > 0) {
+      markdown += `### Common Mistakes & Pitfalls\n`;
+      currentChapter.content.commonMistakes.forEach((m) => {
+        markdown += `- ⚠️ ${m}\n`;
+      });
+      markdown += `\n`;
+    }
+    if (currentChapter.content?.keyTakeaways) {
+      markdown += `### Key Takeaways\n`;
+      currentChapter.content.keyTakeaways.forEach((k) => {
+        markdown += `- ✓ ${k}\n`;
+      });
+    }
+
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${course?.title || 'course'}_Day${currentChapter.chapterNumber}_Notes.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAskTutor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tutorQuestion.trim() || !course || !currentChapter) return;
+
+    const q = tutorQuestion.trim();
+    const style = tutorStyle;
+    setTutorQuestion('');
+    setTutorChat((prev) => [...prev, { sender: 'user', text: q, style }]);
+    setTutorLoading(true);
+
+    try {
+      const res = await fetch('/api/tutor/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q,
+          courseTitle: course.title,
+          chapterTitle: `Day ${currentChapter.chapterNumber}: ${currentChapter.title}`,
+          conceptContext: currentChapter.description,
+          explanationStyle: style,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.reply) {
+        setTutorChat((prev) => [...prev, { sender: 'tutor', text: data.reply }]);
+      } else {
+        setTutorChat((prev) => [
+          ...prev,
+          { sender: 'tutor', text: data.error || 'I had trouble answering that. Please try rephrasing.' },
+        ]);
+      }
+    } catch (err) {
+      setTutorChat((prev) => [
+        ...prev,
+        { sender: 'tutor', text: 'Network connection error. Please try again.' },
+      ]);
+    } finally {
+      setTutorLoading(false);
+    }
+  };
 
   // Submit 5-question assessment
   const handleSubmitAssessment = async () => {
@@ -379,9 +579,27 @@ export const CourseLearningPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Embedded YouTube Video Player */}
+              {/* Embedded YouTube Video Player & Recommendation Details */}
               {course.includeVideo && currentChapter.videoId && (
-                <div className="space-y-2">
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">Educational Video Lecture</span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        ✓ {currentChapter.relevanceScore || 96}% Concept Score
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowVideoModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors self-start sm:self-auto cursor-pointer"
+                    >
+                      <VideoIcon className="w-3.5 h-3.5" />
+                      <span>Switch Video / Instructor</span>
+                    </button>
+                  </div>
+
                   <div className="rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-black aspect-16/9 w-full">
                     <iframe
                       src={`https://www.youtube.com/embed/${currentChapter.videoId}?autoplay=0&rel=0`}
@@ -391,29 +609,91 @@ export const CourseLearningPage: React.FC = () => {
                       allowFullScreen
                     />
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-2">
                     <span className="font-semibold text-slate-700">
                       Channel: <strong className="text-[#8150E8]">{currentChapter.videoChannel || 'AlphaWave Educational Network'}</strong>
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                      ✓ {currentChapter.relevanceScore || 97}% Verified Educational Relevance
+                    <span className="text-slate-400 text-[11px]">
+                      Concept-targeted recommendation (No whole-course duplicates)
                     </span>
                   </div>
+
+                  {currentChapter.videoMatchReason && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-150 text-xs text-slate-600 flex items-start gap-2.5">
+                      <Sparkles className="w-4 h-4 text-[#8150E8] shrink-0 mt-0.5" />
+                      <div className="leading-relaxed">
+                        <strong className="text-slate-900 block mb-0.5">Transparent 6-Factor Recommendation Match:</strong>
+                        <span>{currentChapter.videoMatchReason}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Card-by-Card Concept Notes (Matching the Reference Video Layout) */}
+              {/* Study Notes & Lecture Guide */}
               {currentChapter.content && (
                 <div className="space-y-6">
+                  {/* Notes Header Toolbar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-[#8150E8]" />
+                      <h3 className="text-lg font-extrabold text-slate-900">
+                        Structured Lecture Study Notes
+                      </h3>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={handleCopyNotes}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+                      >
+                        {copiedNotes ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedNotes ? 'Copied!' : 'Copy Notes'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDownloadNotes}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl border border-purple-200 transition-colors shadow-2xs cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download (.md)</span>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Introduction Card */}
                   {currentChapter.content.introduction && (
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-7">
                       <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-2">
-                        {currentChapter.title}
+                        {currentChapter.title} – Overview
                       </h3>
                       <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
                         {currentChapter.content.introduction}
                       </p>
+                    </div>
+                  )}
+
+                  {/* Key Definitions Card */}
+                  {currentChapter.content.definitions && currentChapter.content.definitions.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-7">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                        <Info className="w-4 h-4 text-[#8150E8]" />
+                        <span>Key Definitions & Technical Vocabulary</span>
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {currentChapter.content.definitions.map((def, dIdx) => (
+                          <div
+                            key={dIdx}
+                            className="p-3.5 bg-slate-50 rounded-xl border border-slate-150 text-xs text-slate-700"
+                          >
+                            <span className="font-bold text-[#8150E8] block mb-1">{def.term}</span>
+                            <span className="leading-relaxed">{def.explanation || def.definition}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -435,6 +715,57 @@ export const CourseLearningPage: React.FC = () => {
                       )}
                     </div>
                   ))}
+
+                  {/* Architecture / Concept Diagram Card */}
+                  {currentChapter.content.diagram && (
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-7">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-[#8150E8]" />
+                        <span>System Architecture & Concept Diagram</span>
+                      </h3>
+                      <div className="p-4 bg-slate-900 text-purple-300 font-mono text-xs rounded-xl overflow-x-auto shadow-inner leading-relaxed">
+                        <pre className="whitespace-pre font-mono">
+                          {currentChapter.content.diagram}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Real-World Applications */}
+                  {currentChapter.content.realWorldApplications && currentChapter.content.realWorldApplications.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-7">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <span>Real-World Production Applications</span>
+                      </h3>
+                      <ul className="space-y-2 text-xs sm:text-sm text-slate-700">
+                        {currentChapter.content.realWorldApplications.map((app, aIdx) => (
+                          <li key={aIdx} className="flex items-start gap-2.5 p-3 bg-emerald-50/50 rounded-xl border border-emerald-150">
+                            <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>{app}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Common Pitfalls & Mistakes */}
+                  {currentChapter.content.commonMistakes && currentChapter.content.commonMistakes.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-7">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                        <AlertOctagon className="w-4 h-4 text-amber-600" />
+                        <span>Common Mistakes & Debugging Pitfalls</span>
+                      </h3>
+                      <ul className="space-y-2 text-xs sm:text-sm text-slate-700">
+                        {currentChapter.content.commonMistakes.map((mis, mIdx) => (
+                          <li key={mIdx} className="flex items-start gap-2.5 p-3 bg-amber-50/50 rounded-xl border border-amber-150">
+                            <span className="text-amber-600 font-bold shrink-0">⚠️</span>
+                            <span>{mis}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* Key Takeaways Card */}
                   {currentChapter.content.keyTakeaways && currentChapter.content.keyTakeaways.length > 0 && (
@@ -737,6 +1068,235 @@ export const CourseLearningPage: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Floating Ask AI Tutor Button */}
+      <button
+        onClick={() => setShowTutorModal(true)}
+        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 px-4 py-3 bg-[#8150E8] text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all text-xs font-bold cursor-pointer"
+      >
+        <MessageSquare className="w-4 h-4 fill-white" />
+        <span className="hidden sm:inline">Ask AI Doubt Tutor</span>
+      </button>
+
+      {/* Alternative Video Switcher Modal */}
+      {showVideoModal && currentChapter && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-xl border border-slate-200 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Switch Lecture Video
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Select an alternate instructor or explanation style for Lecture {currentChapter.chapterNumber}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowVideoModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Current video */}
+              <div className="p-3.5 rounded-xl border-2 border-[#8150E8] bg-purple-50/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                    Currently Selected Video
+                  </span>
+                  <span className="text-xs font-bold text-emerald-700">
+                    {currentChapter.relevanceScore || 96}% Score
+                  </span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900">{currentChapter.title}</h4>
+                <p className="text-[11px] text-slate-500">
+                  Channel: {currentChapter.videoChannel || 'AlphaWave Educational Network'}
+                </p>
+              </div>
+
+              {/* Alternatives */}
+              <div className="pt-2">
+                <h4 className="text-xs font-bold text-slate-700 mb-2">
+                  Alternative Recommended Videos
+                </h4>
+
+                {currentChapter.alternativeVideos && currentChapter.alternativeVideos.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {currentChapter.alternativeVideos.map((alt) => (
+                      <div
+                        key={alt.id || alt.videoId}
+                        className="p-3 rounded-xl border border-slate-200 hover:border-purple-200 bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h5 className="text-xs font-bold text-slate-900 line-clamp-1">
+                            {alt.title}
+                          </h5>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                            <span>{alt.channel || alt.channelTitle}</span>
+                            <span>·</span>
+                            <span className="font-semibold text-emerald-600">
+                              {alt.relevanceScore}% Match
+                            </span>
+                          </div>
+                          {alt.matchReason && (
+                            <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
+                              {alt.matchReason}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => handleSelectVideo(alt)}
+                          disabled={switchingVideo}
+                          className="px-3.5 py-1.5 text-xs font-bold text-white rounded-lg transition-transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+                          style={{ backgroundColor: '#8150E8' }}
+                        >
+                          {switchingVideo ? 'Switching...' : 'Use This Video'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic p-3 text-center">
+                    No alternative videos currently cached for this lecture.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Embedded Context-Aware AI Doubt Solver Tutor Modal */}
+      {showTutorModal && currentChapter && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-50 text-[#8150E8] flex items-center justify-center">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    AI Doubt Solver Tutor
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Context: Day {currentChapter.chapterNumber} – {currentChapter.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTutorModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Explanation Mode Selector */}
+            <div className="pt-3 pb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                Explanation Style:
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTutorStyle('simple')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    tutorStyle === 'simple'
+                      ? 'bg-[#8150E8] text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Simple (ELI5)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTutorStyle('detailed')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    tutorStyle === 'detailed'
+                      ? 'bg-[#8150E8] text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Detailed / Deep Dive
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTutorStyle('practical')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    tutorStyle === 'practical'
+                      ? 'bg-[#8150E8] text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Code Example
+                </button>
+              </div>
+            </div>
+
+            {/* Messages Pane */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-3 min-h-[200px]">
+              {tutorChat.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                  <HelpCircle className="w-8 h-8 text-purple-300 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">
+                    Ask any doubt about Lecture {currentChapter.chapterNumber}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                    The tutor is trained on this exact lesson and will clarify any concept or code snippet.
+                  </p>
+                </div>
+              ) : (
+                tutorChat.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed whitespace-pre-line ${
+                        msg.sender === 'user'
+                          ? 'bg-[#8150E8] text-white rounded-br-xs'
+                          : 'bg-slate-100 text-slate-800 rounded-bl-xs'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
+              {tutorLoading && (
+                <div className="flex items-center gap-2 text-xs text-purple-700 bg-purple-50 p-2.5 rounded-xl animate-pulse">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>AI Tutor is thinking...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input Bar */}
+            <form onSubmit={handleAskTutor} className="flex gap-2 pt-3 border-t border-slate-100">
+              <input
+                type="text"
+                value={tutorQuestion}
+                onChange={(e) => setTutorQuestion(e.target.value)}
+                placeholder="e.g. Can you explain pointers with a real-life analogy?"
+                className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#8150E8]"
+              />
+              <button
+                type="submit"
+                disabled={tutorLoading || !tutorQuestion.trim()}
+                className="px-4 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-opacity disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                style={{ backgroundColor: '#8150E8' }}
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Ask</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

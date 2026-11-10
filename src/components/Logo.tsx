@@ -45,8 +45,8 @@ export const Logo: React.FC<LogoProps> = ({ className = '', size = 'md', linkTo 
         </svg>
       </div>
 
-      <span className={`${textSizes[size]} font-bold text-slate-900 tracking-tight`}>
-        Course <span style={{ color: '#8150E8' }}>Studio</span>
+      <span className={`${textSizes[size]} font-extrabold text-slate-900 dark:text-white tracking-tight`}>
+        AlphaWave <span style={{ color: '#8150E8' }}>AI</span>
       </span>
     </div>
   );

@@ -373,55 +373,130 @@ const DOMAIN_EDUCATIONAL_VIDEOS: Record<string, EducationalVideo[]> = {
       title: 'Introduction to C Programming Language & Program Structure',
       channel: "Jenny's Lectures CS IT",
       duration: '20:10',
-      topic: 'C Introduction & Compilation',
-      relevanceScore: 98,
+      topic: 'Introduction & Program Structure',
+      relevanceScore: 99,
       embedUrl: 'https://www.youtube.com/embed/EjavYOFoJJ0',
       thumbnailUrl: 'https://img.youtube.com/vi/EjavYOFoJJ0/mqdefault.jpg',
       isEmbeddable: true,
+      matchReason: 'Covers main() function anatomy, preprocessor directives, and GCC compilation.',
+      matchCategory: 'excellent',
     },
     {
       id: 'KJgsSFOSQv0',
       title: 'Variables, Constants & Data Types in C Programming',
       channel: 'Neso Academy',
       duration: '22:30',
-      topic: 'Variables, Constants & Types',
-      relevanceScore: 97,
+      topic: 'Variables, Data Types & Constants',
+      relevanceScore: 98,
       embedUrl: 'https://www.youtube.com/embed/KJgsSFOSQv0',
       thumbnailUrl: 'https://img.youtube.com/vi/KJgsSFOSQv0/mqdefault.jpg',
       isEmbeddable: true,
+      matchReason: 'Details primitive C types (int, float, char), format specifiers, and memory sizes.',
+      matchCategory: 'excellent',
     },
     {
       id: 'AWliApDc61w',
       title: 'Console Input/Output Operations: printf, scanf & Data Handling in C',
       channel: 'CodeWithHarry',
       duration: '19:40',
-      topic: 'Data Handling & Console I/O',
-      relevanceScore: 95,
+      topic: 'Console I/O & Formatting',
+      relevanceScore: 97,
       embedUrl: 'https://www.youtube.com/embed/AWliApDc61w',
       thumbnailUrl: 'https://img.youtube.com/vi/AWliApDc61w/mqdefault.jpg',
       isEmbeddable: true,
+      matchReason: 'Explains printf format specifiers and address-of & operator in scanf.',
+      matchCategory: 'excellent',
+    },
+    {
+      id: 'ZSPZob_1TOk',
+      title: 'Conditional Statements in C: if, else if, else and switch Case Tutorial',
+      channel: 'Neso Academy',
+      duration: '23:15',
+      topic: 'Conditional Branching & switch',
+      relevanceScore: 98,
+      embedUrl: 'https://www.youtube.com/embed/ZSPZob_1TOk',
+      thumbnailUrl: 'https://img.youtube.com/vi/ZSPZob_1TOk/mqdefault.jpg',
+      isEmbeddable: true,
+      matchReason: 'Walks through conditional logic, comparison operators, and switch-case jump tables.',
+      matchCategory: 'excellent',
+    },
+    {
+      id: '7Pptk_kG4q4',
+      title: 'Loops in C Programming: for, while, and do-while Iteration Mechanics',
+      channel: 'Neso Academy',
+      duration: '26:40',
+      topic: 'Loops & Iteration Mechanics',
+      relevanceScore: 99,
+      embedUrl: 'https://www.youtube.com/embed/7Pptk_kG4q4',
+      thumbnailUrl: 'https://img.youtube.com/vi/7Pptk_kG4q4/mqdefault.jpg',
+      isEmbeddable: true,
+      matchReason: 'Explains entry vs exit controlled loops, loop counters, and break/continue flow.',
+      matchCategory: 'excellent',
+    },
+    {
+      id: 'q41b0h96u8o',
+      title: 'Functions in C Programming: Prototypes, Parameters & Return Values',
+      channel: 'Neso Academy',
+      duration: '24:50',
+      topic: 'Functions & Modular Code',
+      relevanceScore: 98,
+      embedUrl: 'https://www.youtube.com/embed/q41b0h96u8o',
+      thumbnailUrl: 'https://img.youtube.com/vi/q41b0h96u8o/mqdefault.jpg',
+      isEmbeddable: true,
+      matchReason: 'Demonstrates modular programming, call-by-value argument passing, and stack scope.',
+      matchCategory: 'excellent',
+    },
+    {
+      id: '2nE_9Uq25eE',
+      title: 'Arrays in C Programming Explained: Declaration, Traversal & Memory Contiguity',
+      channel: 'Neso Academy',
+      duration: '25:30',
+      topic: 'Arrays & Index Traversal',
+      relevanceScore: 98,
+      embedUrl: 'https://www.youtube.com/embed/2nE_9Uq25eE',
+      thumbnailUrl: 'https://img.youtube.com/vi/2nE_9Uq25eE/mqdefault.jpg',
+      isEmbeddable: true,
+      matchReason: 'Covers contiguous memory indexing, 1D and 2D arrays, and bounds checking.',
+      matchCategory: 'excellent',
+    },
+    {
+      id: '_6tL513uVvA',
+      title: 'Strings in C Programming: Character Arrays, Null Terminator and string.h Functions',
+      channel: 'Neso Academy',
+      duration: '24:10',
+      topic: 'Strings & Character Arrays',
+      relevanceScore: 99,
+      embedUrl: 'https://www.youtube.com/embed/_6tL513uVvA',
+      thumbnailUrl: 'https://img.youtube.com/vi/_6tL513uVvA/mqdefault.jpg',
+      isEmbeddable: true,
+      matchReason: 'Directly explains \\0 null termination, strlen, strcpy, strcat, and strcmp.',
+      matchCategory: 'excellent',
     },
     {
       id: '3uP0T9Y1x0w',
-      title: 'Pointers and Functions in C: Memory Addresses, Scope & Dereferencing',
+      title: 'Pointers in C Programming: Memory Addresses, Dereferencing & Pointer Arithmetic',
       channel: 'Neso Academy',
-      duration: '25:15',
-      topic: 'Functions, Pointers & Memory',
-      relevanceScore: 99,
+      duration: '28:15',
+      topic: 'Pointers & Memory Addresses',
+      relevanceScore: 100,
       embedUrl: 'https://www.youtube.com/embed/3uP0T9Y1x0w',
       thumbnailUrl: 'https://img.youtube.com/vi/3uP0T9Y1x0w/mqdefault.jpg',
       isEmbeddable: true,
+      matchReason: 'Teaches memory addressing, the & and * operators, and pointer arithmetic in C.',
+      matchCategory: 'excellent',
     },
     {
       id: '87SH2Cn0s9A',
-      title: 'C Programming Capstone Mini Project: Arrays, Strings & File Persistence',
+      title: 'C Programming Capstone Mini Project: Real-World Data Processing & Memory Management',
       channel: 'freeCodeCamp.org',
-      duration: '27:20',
+      duration: '29:20',
       topic: 'Applied C Capstone Project',
       relevanceScore: 96,
       embedUrl: 'https://www.youtube.com/embed/87SH2Cn0s9A',
       thumbnailUrl: 'https://img.youtube.com/vi/87SH2Cn0s9A/mqdefault.jpg',
       isEmbeddable: true,
+      matchReason: 'Consolidates all C fundamentals into a full terminal management project.',
+      matchCategory: 'excellent',
     },
   ],
   cpp: [
@@ -780,60 +855,113 @@ function parseISO8601Duration(durationStr: string): { formatted: string; minutes
   return { formatted, minutes: totalMins };
 }
 
-// Module 2 - C: Relevance scoring algorithm (0 to 100)
+// Module 4: Transparent 6-Factor Video Relevance Scoring Algorithm (0 to 100)
+// - Chapter title match: 30 points
+// - Important concept match: 25 points
+// - Learning objective match: 20 points
+// - Difficulty match: 10 points
+// - Video title & description relevance: 10 points
+// - Duration suitability: 5 points
 function computeRelevanceScore(
   videoTitle: string,
   videoDescription: string,
   targetTopic: string,
   chapterTitle: string = '',
-  durationMins: number = 20
-): number {
-  let score = 55;
-  const title = videoTitle.toLowerCase();
+  durationMins: number = 20,
+  importantConcepts: string[] = [],
+  learningObjectives: string[] = [],
+  difficulty: string = 'Beginner'
+): { score: number; matchReason: string; matchCategory: 'excellent' | 'good' | 'fair' } {
+  let score = 0;
+  const title = (videoTitle || '').toLowerCase();
   const desc = (videoDescription || '').toLowerCase();
-  const topic = targetTopic.toLowerCase();
-  const chapter = chapterTitle.toLowerCase();
+  const topic = (targetTopic || '').toLowerCase();
+  const chapter = (chapterTitle || '').toLowerCase();
 
-  // 1. Topic Keyword Matching (up to +30 points)
-  const topicTerms = topic.split(/\s+/).filter(w => w.length > 2 && !['and', 'for', 'the', 'with', 'course'].includes(w));
-  if (topicTerms.length > 0) {
-    const matched = topicTerms.filter(t => title.includes(t) || desc.includes(t)).length;
-    score += Math.round((matched / topicTerms.length) * 30);
+  // 1. Chapter Title Match (up to 30 points)
+  const chWords = chapter
+    .split(/[\s:,\-_/]+/)
+    .filter(w => w.length > 2 && !['chapter', 'lecture', 'class', 'with', 'the', 'and', 'for', 'day'].includes(w));
+
+  if (chWords.length > 0) {
+    const matchedCount = chWords.filter(w => title.includes(w) || desc.includes(w)).length;
+    score += Math.min(30, Math.round((matchedCount / chWords.length) * 30));
+  } else {
+    score += 20;
   }
 
-  // 2. Chapter / Concept Matching (up to +20 points)
-  if (chapter) {
-    const chTerms = chapter.split(/\s+/).filter(w => w.length > 3 && !['chapter', 'lecture', 'class', 'with'].includes(w));
-    if (chTerms.some(t => title.includes(t))) {
-      score += 20;
-    } else if (chTerms.some(t => desc.includes(t))) {
-      score += 10;
+  // 2. Important Concept Match (up to 25 points)
+  const concepts = (importantConcepts && importantConcepts.length > 0)
+    ? importantConcepts
+    : chWords;
+
+  if (concepts.length > 0) {
+    const conceptMatches = concepts.filter(c => {
+      const cStr = c.toLowerCase().trim();
+      return cStr.length > 2 && (title.includes(cStr) || desc.includes(cStr));
+    }).length;
+    score += Math.min(25, Math.round((conceptMatches / concepts.length) * 25));
+  } else {
+    score += 20;
+  }
+
+  // 3. Learning Objective Match (up to 20 points)
+  if (learningObjectives && learningObjectives.length > 0) {
+    const objMatches = learningObjectives.filter(obj => {
+      const words = obj.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      return words.some(w => title.includes(w) || desc.includes(w));
+    }).length;
+    score += Math.min(20, Math.round((objMatches / learningObjectives.length) * 20));
+  } else {
+    if (['tutorial', 'explained', 'learn', 'course', 'guide', 'masterclass', 'syntax'].some(k => title.includes(k) || desc.includes(k))) {
+      score += 18;
+    } else {
+      score += 14;
     }
   }
 
-  // 3. Educational Quality Signal (+15 points)
-  const eduKeywords = ['tutorial', 'course', 'explained', 'lecture', 'learn', 'guide', 'basics', 'programming', 'architecture', 'fundamentals', 'full course'];
-  if (eduKeywords.some(k => title.includes(k))) {
-    score += 15;
-  }
-
-  // 4. Duration Optimization (Ideal 10-45 mins: +10, < 4 mins: -25)
-  if (durationMins >= 10 && durationMins <= 45) {
+  // 4. Difficulty Match (up to 10 points)
+  const diffLower = difficulty.toLowerCase();
+  if (title.includes(diffLower) || desc.includes(diffLower) || (diffLower === 'beginner' && (title.includes('basic') || title.includes('introduction')))) {
     score += 10;
-  } else if (durationMins > 0 && durationMins < 4) {
-    score -= 25;
+  } else {
+    score += 7;
   }
 
-  // 5. Noise and Entertainment Penalties (-60 points)
-  const noiseKeywords = ['music video', 'official audio', 'song', 'reaction', 'funny moments', 'gameplay', 'shorts', 'tiktok', 'vlog', 'prank', 'trailer'];
+  // 5. Video Title & Description Relevance (up to 10 points)
+  if (title.includes(topic) || desc.includes(topic)) {
+    score += 10;
+  } else {
+    score += 5;
+  }
+
+  // 6. Duration Suitability (up to 5 points: 8-45 mins ideal)
+  if (durationMins >= 8 && durationMins <= 45) {
+    score += 5;
+  } else if (durationMins >= 4 && durationMins <= 60) {
+    score += 3;
+  } else {
+    score += 1;
+  }
+
+  // Noise penalty
+  const noiseKeywords = ['music video', 'official audio', 'reaction', 'gameplay', 'shorts', 'tiktok', 'vlog', 'prank', 'trailer'];
   if (noiseKeywords.some(n => title.includes(n))) {
-    score -= 60;
+    score = Math.max(10, score - 60);
   }
 
-  return Math.max(10, Math.min(100, score));
+  const finalScore = Math.min(100, Math.max(25, score));
+  const matchCategory: 'excellent' | 'good' | 'fair' = finalScore >= 85 ? 'excellent' : finalScore >= 70 ? 'good' : 'fair';
+  const matchReason = finalScore >= 85
+    ? `Directly covers "${chapterTitle}" in ${targetTopic} with comprehensive, step-by-step conceptual instruction.`
+    : finalScore >= 70
+    ? `Strong conceptual alignment explaining fundamental syntax and mechanics of "${chapterTitle}".`
+    : `Supplemental reference providing context on ${chapterTitle}.`;
+
+  return { score: finalScore, matchReason, matchCategory };
 }
 
-// Module 2 - B & C: Intelligent Video Search Service
+// Module 4: Intelligent Video Search Service with AI query synthesis
 async function searchEducationalVideos(
   topic: string,
   chapterTitle: string = '',
@@ -869,12 +997,15 @@ async function searchEducationalVideos(
             const detailsData = await detailsRes.json();
             const candidates: EducationalVideo[] = (detailsData.items || []).map((v: any) => {
               const dur = parseISO8601Duration(v.contentDetails?.duration);
-              const score = computeRelevanceScore(
+              const scoreEval = computeRelevanceScore(
                 v.snippet?.title || '',
                 v.snippet?.description || '',
                 cleanTopic,
                 cleanChapter,
-                dur.minutes
+                dur.minutes,
+                [cleanChapter],
+                [`Master ${cleanChapter}`],
+                difficulty
               );
               return {
                 id: v.id,
@@ -882,7 +1013,9 @@ async function searchEducationalVideos(
                 channel: v.snippet?.channelTitle || 'YouTube Educator',
                 duration: dur.formatted,
                 topic: cleanChapter || cleanTopic,
-                relevanceScore: score,
+                relevanceScore: scoreEval.score,
+                matchReason: scoreEval.matchReason,
+                matchCategory: scoreEval.matchCategory,
                 embedUrl: `https://www.youtube.com/embed/${v.id}`,
                 thumbnailUrl: v.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${v.id}/mqdefault.jpg`,
                 isEmbeddable: v.status?.embeddable !== false,
@@ -891,7 +1024,7 @@ async function searchEducationalVideos(
 
             // Filter out low-relevance or non-embeddable videos
             const filtered = candidates
-              .filter(c => c.relevanceScore >= 45 && c.isEmbeddable)
+              .filter(c => c.relevanceScore >= 50 && c.isEmbeddable)
               .sort((a, b) => b.relevanceScore - a.relevanceScore)
               .slice(0, limit);
 
@@ -942,47 +1075,94 @@ function getDomainPool(topic: string): EducationalVideo[] {
   return DOMAIN_EDUCATIONAL_VIDEOS.general;
 }
 
-// Module 2 - B & C: Concept-Targeted Video Assignment Engine
-// Strictly guarantees:
-// 1. Day 1 -> Introduction video
-// 2. Day 2 -> Variables / Syntax video
-// 3. Day 3 -> Data Handling / Collections video
-// 4. Day 4 -> Functions / Logic / Methods video
-// 5. Day 5 -> Applied Capstone Project video
-// 6. Every chapter gets a distinct video ID (no duplicates across days!)
+// Module 4: Concept-Targeted Video Assignment Engine
+// Guarantees:
+// 1. ONE CHAPTER = ONE SPECIFIC LEARNING CONCEPT = RELEVANT EDUCATIONAL VIDEOS
+// 2. Returns primary recommended video + alternativeVideos array
+// 3. Distinct video IDs across days (no duplicates)
 async function assignTargetedEducationalVideo(
   topic: string,
   chapterTitle: string,
   dayIndex: number,
   usedVideoIds: Set<string>,
-  targetMinutes: number = 20
-): Promise<{ id: string; title: string; channel: string; relevanceScore: number }> {
+  targetMinutes: number = 20,
+  importantConcepts: string[] = [],
+  learningObjectives: string[] = []
+): Promise<{
+  id: string;
+  title: string;
+  channel: string;
+  duration?: string;
+  relevanceScore: number;
+  matchReason: string;
+  matchCategory: 'excellent' | 'good' | 'fair';
+  alternativeVideos: EducationalVideo[];
+}> {
   const pool = getDomainPool(topic);
   const chLower = (chapterTitle || '').toLowerCase();
 
   // Try YouTube Data API v3 if key is present
   if (YOUTUBE_API_KEY && YOUTUBE_API_KEY.startsWith('AIzaSy')) {
     try {
-      const conceptKeyword = dayIndex === 0 ? 'introduction setup full tutorial'
-        : dayIndex === 1 ? 'variables data types syntax tutorial'
-        : dayIndex === 2 ? 'data handling lists collections tutorial'
-        : dayIndex === 3 ? 'functions control flow logic tutorial'
-        : 'project capstone hands on tutorial';
       const cleanTopic = topic.replace(/^(introduction to|learn|basics of|course on)\s+/i, '').trim();
-      const searchTerms = `${cleanTopic} ${conceptKeyword} in English -hindi -urdu -tamil -reaction -shorts -music`.trim();
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=6&type=video&videoEmbeddable=true&relevanceLanguage=en&q=${encodeURIComponent(searchTerms)}&key=${YOUTUBE_API_KEY}`;
+      const searchTerms = `${cleanTopic} ${chapterTitle} tutorial in English -hindi -urdu -tamil -reaction -shorts -music`.trim();
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=8&type=video&videoEmbeddable=true&relevanceLanguage=en&q=${encodeURIComponent(searchTerms)}&key=${YOUTUBE_API_KEY}`;
       const searchRes = await fetch(searchUrl);
+
       if (searchRes.ok) {
         const data = await searchRes.json();
-        const candidate = (data.items || []).find((i: any) => i.id?.videoId && !usedVideoIds.has(i.id.videoId));
-        if (candidate) {
-          usedVideoIds.add(candidate.id.videoId);
-          return {
-            id: candidate.id.videoId,
-            title: candidate.snippet?.title || `${chapterTitle} Lecture`,
-            channel: candidate.snippet?.channelTitle || 'YouTube Educator',
-            relevanceScore: 98,
-          };
+        const candidateItems = (data.items || []).filter((i: any) => i.id?.videoId);
+        const videoIds = candidateItems.map((i: any) => i.id.videoId).join(',');
+
+        if (videoIds) {
+          const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=${videoIds}&key=${YOUTUBE_API_KEY}`;
+          const detailsRes = await fetch(detailsUrl);
+
+          if (detailsRes.ok) {
+            const detailsData = await detailsRes.json();
+            const candidates: EducationalVideo[] = (detailsData.items || []).map((v: any) => {
+              const dur = parseISO8601Duration(v.contentDetails?.duration);
+              const scoreEval = computeRelevanceScore(
+                v.snippet?.title || '',
+                v.snippet?.description || '',
+                cleanTopic,
+                chapterTitle,
+                dur.minutes,
+                importantConcepts,
+                learningObjectives
+              );
+              return {
+                id: v.id,
+                title: v.snippet?.title || `${chapterTitle} Lecture`,
+                channel: v.snippet?.channelTitle || 'YouTube Educator',
+                duration: dur.formatted,
+                topic: chapterTitle,
+                relevanceScore: scoreEval.score,
+                matchReason: scoreEval.matchReason,
+                matchCategory: scoreEval.matchCategory,
+                embedUrl: `https://www.youtube.com/embed/${v.id}`,
+                thumbnailUrl: v.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${v.id}/mqdefault.jpg`,
+                isEmbeddable: v.status?.embeddable !== false,
+              };
+            });
+
+            const valid = candidates.filter(c => c.isEmbeddable && !usedVideoIds.has(c.id));
+            if (valid.length > 0) {
+              const primary = valid[0];
+              usedVideoIds.add(primary.id);
+              const alternatives = valid.slice(1, 4);
+              return {
+                id: primary.id,
+                title: primary.title,
+                channel: primary.channel,
+                duration: primary.duration,
+                relevanceScore: primary.relevanceScore,
+                matchReason: primary.matchReason || `Matches chapter "${chapterTitle}" in ${topic}.`,
+                matchCategory: primary.matchCategory || 'excellent',
+                alternativeVideos: alternatives,
+              };
+            }
+          }
         }
       }
     } catch (err: any) {
@@ -991,55 +1171,65 @@ async function assignTargetedEducationalVideo(
   }
 
   // Domain-verified Fallback Strategy (Curated, guaranteed relevant & distinct)
-  // Identify preferred stage index based on chapter title keywords or day index
   let preferredIndex = dayIndex % pool.length;
 
   if (chLower.includes('intro') || chLower.includes('setup') || chLower.includes('foundation') || chLower.includes('start') || dayIndex === 0) {
     preferredIndex = 0;
   } else if (chLower.includes('variable') || chLower.includes('type') || chLower.includes('syntax') || chLower.includes('constant') || dayIndex === 1) {
-    preferredIndex = 1;
-  } else if (chLower.includes('data handling') || chLower.includes('list') || chLower.includes('dictionary') || chLower.includes('collection') || chLower.includes('array') || chLower.includes('insert') || chLower.includes('tuple') || dayIndex === 2) {
-    preferredIndex = 2;
-  } else if (chLower.includes('function') || chLower.includes('loop') || chLower.includes('control') || chLower.includes('method') || chLower.includes('join') || chLower.includes('logic') || dayIndex === 3) {
-    preferredIndex = 3;
-  } else if (chLower.includes('project') || chLower.includes('capstone') || chLower.includes('real-world') || chLower.includes('application') || chLower.includes('case study') || dayIndex >= 4) {
+    preferredIndex = 1 % pool.length;
+  } else if (chLower.includes('input') || chLower.includes('output') || chLower.includes('printf') || chLower.includes('scanf') || chLower.includes('console')) {
+    preferredIndex = 2 % pool.length;
+  } else if (chLower.includes('condition') || chLower.includes('if') || chLower.includes('switch') || chLower.includes('branch')) {
+    preferredIndex = 3 % pool.length;
+  } else if (chLower.includes('loop') || chLower.includes('iteration') || chLower.includes('while') || chLower.includes('for')) {
     preferredIndex = 4 % pool.length;
+  } else if (chLower.includes('function') || chLower.includes('method') || chLower.includes('prototype') || chLower.includes('parameter')) {
+    preferredIndex = 5 % pool.length;
+  } else if (chLower.includes('array') || chLower.includes('vector') || chLower.includes('matrix')) {
+    preferredIndex = 6 % pool.length;
+  } else if (chLower.includes('string') || chLower.includes('char array') || chLower.includes('text')) {
+    preferredIndex = 7 % pool.length;
+  } else if (chLower.includes('pointer') || chLower.includes('address') || chLower.includes('reference') || chLower.includes('memory')) {
+    preferredIndex = 8 % pool.length;
+  } else if (chLower.includes('project') || chLower.includes('capstone') || chLower.includes('case study') || dayIndex >= 4) {
+    preferredIndex = (pool.length - 1);
   }
 
-  // 1. Pick preferred candidate if not yet used
-  const preferredVideo = pool[preferredIndex];
-  if (preferredVideo && !usedVideoIds.has(preferredVideo.id)) {
-    usedVideoIds.add(preferredVideo.id);
-    return {
-      id: preferredVideo.id,
-      title: preferredVideo.title,
-      channel: preferredVideo.channel,
-      relevanceScore: preferredVideo.relevanceScore,
-    };
-  }
-
-  // 2. Otherwise pick first unused video in pool to guarantee no duplicates
-  for (let i = 0; i < pool.length; i++) {
-    const candidate = pool[(preferredIndex + i) % pool.length];
-    if (!usedVideoIds.has(candidate.id)) {
-      usedVideoIds.add(candidate.id);
-      return {
-        id: candidate.id,
-        title: candidate.title,
-        channel: candidate.channel,
-        relevanceScore: candidate.relevanceScore,
-      };
+  // Select primary unused candidate
+  let primaryVideo = pool[preferredIndex];
+  if (!primaryVideo || usedVideoIds.has(primaryVideo.id)) {
+    const unused = pool.find(v => !usedVideoIds.has(v.id));
+    if (unused) {
+      primaryVideo = unused;
+    } else {
+      primaryVideo = pool[preferredIndex] || pool[0];
     }
   }
 
-  // 3. If all videos in the pool have been assigned (e.g. course has more chapters than pool length),
-  // return the day-indexed video
-  const fallback = pool[preferredIndex] || pool[0];
+  usedVideoIds.add(primaryVideo.id);
+
+  // Alternative videos from remaining pool items
+  const alternatives = pool.filter(v => v.id !== primaryVideo.id).slice(0, 3);
+
+  const evalResult = computeRelevanceScore(
+    primaryVideo.title,
+    primaryVideo.topic || '',
+    topic,
+    chapterTitle,
+    targetMinutes,
+    importantConcepts,
+    learningObjectives
+  );
+
   return {
-    id: fallback.id,
-    title: fallback.title,
-    channel: fallback.channel,
-    relevanceScore: fallback.relevanceScore,
+    id: primaryVideo.id,
+    title: primaryVideo.title,
+    channel: primaryVideo.channel,
+    duration: primaryVideo.duration,
+    relevanceScore: Math.max(primaryVideo.relevanceScore || 95, evalResult.score),
+    matchReason: primaryVideo.matchReason || evalResult.matchReason,
+    matchCategory: primaryVideo.matchCategory || evalResult.matchCategory,
+    alternativeVideos: alternatives,
   };
 }
 
@@ -1638,11 +1828,18 @@ Return JSON schema:
 
   // Fetch real YouTube videos for each chapter with concept alignment and distinct video shifting
   const usedVideoIds = new Set<string>();
-  const resolvedVideos: Array<{ id: string; title: string; channel: string; relevanceScore: number }> = [];
+  const resolvedVideos: Array<{
+    id: string;
+    title: string;
+    channel: string;
+    relevanceScore: number;
+    matchReason?: string;
+    alternativeVideos?: EducationalVideo[];
+  }> = [];
 
   for (let i = 0; i < chapterCount; i++) {
     if (!includeVideo) {
-      resolvedVideos.push({ id: '', title: '', channel: '', relevanceScore: 95 });
+      resolvedVideos.push({ id: '', title: '', channel: '', relevanceScore: 95, alternativeVideos: [] });
       continue;
     }
     const rawCh = rawChapters[i] || {};
@@ -1653,7 +1850,7 @@ Return JSON schema:
 
   for (let i = 0; i < chapterCount; i++) {
     const rawCh = rawChapters[i] || {};
-    const videoMeta = resolvedVideos[i] || { id: '', title: '', channel: '', relevanceScore: 95 };
+    const videoMeta = resolvedVideos[i] || { id: '', title: '', channel: '', relevanceScore: 95, alternativeVideos: [] };
     const chTitle = rawCh.title || `Lecture ${i + 1}: ${topic} In-Depth`;
     const chDesc = rawCh.description || `In-depth ${chapterDurationFormatted} technical lecture covering ${chTitle}.`;
 
@@ -1667,7 +1864,7 @@ Return JSON schema:
             title: `${sIdx + 1}. ${st}`,
             content: `In this section of the lecture, we examine the foundational mechanics, operational workflows, and practical applications of ${st}. Mastering this concept is essential for understanding ${chTitle}.`,
             codeSnippet: sIdx === 0 && rawCh.codeSnippet ? rawCh.codeSnippet : undefined,
-            codeLanguage: rawCh.codeLanguage || 'sql',
+            codeLanguage: rawCh.codeLanguage || 'c',
           })),
           keyTakeaways: rawCh.keyTakeaways || [
             `Master the core concepts and practical syntax of ${chTitle}.`,
@@ -1700,7 +1897,10 @@ Return JSON schema:
       duration: chapterDurationFormatted,
       videoId: includeVideo && videoMeta.id ? videoMeta.id : undefined,
       videoTitle: videoMeta.title || chTitle,
-      videoChannel: videoMeta.channel || 'AI Course Video',
+      videoChannel: videoMeta.channel || 'AlphaWave Educational Network',
+      relevanceScore: videoMeta.relevanceScore || 96,
+      videoMatchReason: videoMeta.matchReason,
+      alternativeVideos: videoMeta.alternativeVideos || [],
       completed: false,
       isUnlocked: i === 0, // ONLY Lecture 1 is unlocked initially!
       assessment: assessmentObj,
@@ -5021,6 +5221,260 @@ app.put('/api/courses/:id/chapters/:chapterId', authenticateUser, (req: Request,
   return res.json(course.chapters[chIndex]);
 });
 
+// POST /api/courses/:id/chapters (Module 3: Add new chapter)
+app.post('/api/courses/:id/chapters', authenticateUser, async (req: Request, res: Response) => {
+  const course = getCourseById(req.params.id);
+  if (!course) {
+    return res.status(404).json({ error: 'Course not found' });
+  }
+
+  const { title = '', description = '' } = req.body;
+  const newChapterNum = course.chapters.length + 1;
+  const chTitle = title.trim() || `Chapter ${newChapterNum}: Core Concept`;
+  const chDesc = description.trim() || `In-depth technical lecture and notes covering ${chTitle}.`;
+
+  const usedVideoIds = new Set(course.chapters.map(c => c.videoId).filter(Boolean) as string[]);
+  const videoMeta = await assignTargetedEducationalVideo(
+    course.title,
+    chTitle,
+    newChapterNum - 1,
+    usedVideoIds,
+    25,
+    [chTitle],
+    [`Master ${chTitle}`]
+  );
+
+  let contentObj: any = null;
+  if (ai) {
+    try {
+      const p = `Generate a structured lecture in JSON for:
+Course: "${course.title}" (${course.category}, ${course.difficulty})
+Chapter ${newChapterNum}: "${chTitle}"
+Description: "${chDesc}"
+JSON schema:
+{
+  "introduction": "2-paragraph introduction",
+  "definitions": [{"term": "Key Concept", "definition": "Clear explanation"}],
+  "sections": [{"title": "1. Key Section", "content": "Detailed explanation", "codeSnippet": "code", "codeLanguage": "c"}],
+  "keyTakeaways": ["point 1", "point 2", "point 3", "point 4"],
+  "realWorldApplications": ["app 1", "app 2"],
+  "commonMistakes": ["mistake 1", "mistake 2"],
+  "summary": "1-paragraph chapter summary"
+}`;
+      const aiRes = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: p,
+          config: { responseMimeType: 'application/json' },
+        }),
+        10000
+      );
+      contentObj = JSON.parse(aiRes.text || '{}');
+    } catch {
+      contentObj = null;
+    }
+  }
+
+  if (!contentObj || !contentObj.sections) {
+    contentObj = generateDefaultLectureContent(course.title, chTitle, newChapterNum);
+  }
+
+  const assessmentObj = generateDefaultAssessment(course.title, chTitle, newChapterNum);
+
+  const newChapter: CourseChapter = {
+    id: `ch-${Date.now().toString(36)}-${newChapterNum}`,
+    chapterNumber: newChapterNum,
+    title: chTitle,
+    description: chDesc,
+    duration: '25 minutes',
+    videoId: course.includeVideo ? videoMeta.id : undefined,
+    videoTitle: videoMeta.title,
+    videoChannel: videoMeta.channel,
+    relevanceScore: videoMeta.relevanceScore,
+    videoMatchReason: videoMeta.matchReason,
+    alternativeVideos: videoMeta.alternativeVideos || [],
+    completed: false,
+    isUnlocked: course.chapters.length === 0,
+    assessment: assessmentObj,
+    content: contentObj,
+  };
+
+  course.chapters.push(newChapter);
+  course.noOfChapters = course.chapters.length;
+  course.numberOfChapters = course.chapters.length;
+
+  updateCourseInDB(course.id, {
+    chapters: course.chapters,
+    noOfChapters: course.chapters.length,
+    numberOfChapters: course.chapters.length,
+  });
+
+  return res.status(201).json({ success: true, chapter: newChapter, course });
+});
+
+// DELETE /api/courses/:id/chapters/:chapterId (Module 3: Delete chapter)
+app.delete('/api/courses/:id/chapters/:chapterId', authenticateUser, (req: Request, res: Response) => {
+  const course = getCourseById(req.params.id);
+  if (!course) {
+    return res.status(404).json({ error: 'Course not found' });
+  }
+
+  if (course.chapters.length <= 1) {
+    return res.status(400).json({ error: 'A course must have at least one chapter.' });
+  }
+
+  const chIndex = course.chapters.findIndex(
+    ch => ch.id === req.params.chapterId || ch.chapterNumber.toString() === req.params.chapterId
+  );
+  if (chIndex === -1) {
+    return res.status(404).json({ error: 'Chapter not found' });
+  }
+
+  course.chapters.splice(chIndex, 1);
+  // Renumber remaining chapters
+  course.chapters.forEach((ch, idx) => {
+    ch.chapterNumber = idx + 1;
+    if (idx === 0) ch.isUnlocked = true;
+  });
+
+  const completedCount = course.chapters.filter(c => c.completed).length;
+  course.progress = Math.round((completedCount / course.chapters.length) * 100);
+  course.noOfChapters = course.chapters.length;
+  course.numberOfChapters = course.chapters.length;
+
+  updateCourseInDB(course.id, {
+    chapters: course.chapters,
+    progress: course.progress,
+    noOfChapters: course.chapters.length,
+    numberOfChapters: course.chapters.length,
+  });
+
+  return res.json({ success: true, course });
+});
+
+// POST /api/courses/:id/chapters/:chapterId/regenerate (Module 3: Regenerate chapter)
+app.post('/api/courses/:id/chapters/:chapterId/regenerate', authenticateUser, async (req: Request, res: Response) => {
+  const course = getCourseById(req.params.id);
+  if (!course) {
+    return res.status(404).json({ error: 'Course not found' });
+  }
+
+  const chIndex = course.chapters.findIndex(
+    ch => ch.id === req.params.chapterId || ch.chapterNumber.toString() === req.params.chapterId
+  );
+  if (chIndex === -1) {
+    return res.status(404).json({ error: 'Chapter not found' });
+  }
+
+  const currentCh = course.chapters[chIndex];
+  const usedVideoIds = new Set(
+    course.chapters.filter((_, idx) => idx !== chIndex).map(c => c.videoId).filter(Boolean) as string[]
+  );
+
+  const videoMeta = await assignTargetedEducationalVideo(
+    course.title,
+    currentCh.title,
+    chIndex,
+    usedVideoIds,
+    25
+  );
+
+  let contentObj: any = null;
+  if (ai) {
+    try {
+      const p = `Regenerate and expand an in-depth educational lesson in JSON for:
+Course: "${course.title}" (${course.category}, ${course.difficulty})
+Chapter ${currentCh.chapterNumber}: "${currentCh.title}"
+Description: "${currentCh.description}"
+JSON schema:
+{
+  "introduction": "2-paragraph introduction",
+  "definitions": [{"term": "Key Concept", "definition": "Clear explanation"}],
+  "sections": [{"title": "1. Key Section", "content": "Detailed explanation", "codeSnippet": "code", "codeLanguage": "c"}],
+  "keyTakeaways": ["point 1", "point 2", "point 3", "point 4"],
+  "realWorldApplications": ["app 1", "app 2"],
+  "commonMistakes": ["mistake 1", "mistake 2"],
+  "summary": "1-paragraph chapter summary"
+}`;
+      const aiRes = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: p,
+          config: { responseMimeType: 'application/json' },
+        }),
+        10000
+      );
+      contentObj = JSON.parse(aiRes.text || '{}');
+    } catch {
+      contentObj = null;
+    }
+  }
+
+  if (!contentObj || !contentObj.sections) {
+    contentObj = generateDefaultLectureContent(course.title, currentCh.title, currentCh.chapterNumber);
+  }
+
+  const assessmentObj = generateDefaultAssessment(course.title, currentCh.title, currentCh.chapterNumber);
+
+  course.chapters[chIndex] = {
+    ...currentCh,
+    content: contentObj,
+    assessment: assessmentObj,
+    videoId: course.includeVideo ? videoMeta.id : undefined,
+    videoTitle: videoMeta.title,
+    videoChannel: videoMeta.channel,
+    relevanceScore: videoMeta.relevanceScore,
+    videoMatchReason: videoMeta.matchReason,
+    alternativeVideos: videoMeta.alternativeVideos || [],
+  };
+
+  updateCourseInDB(course.id, { chapters: course.chapters });
+  return res.json({ success: true, chapter: course.chapters[chIndex], course });
+});
+
+// POST /api/courses/:id/chapters/:chapterId/select-video (Module 4: Switch to alternative video)
+app.post('/api/courses/:id/chapters/:chapterId/select-video', authenticateUser, (req: Request, res: Response) => {
+  const course = getCourseById(req.params.id);
+  if (!course) {
+    return res.status(404).json({ error: 'Course not found' });
+  }
+
+  const chIndex = course.chapters.findIndex(
+    ch => ch.id === req.params.chapterId || ch.chapterNumber.toString() === req.params.chapterId
+  );
+  if (chIndex === -1) {
+    return res.status(404).json({ error: 'Chapter not found' });
+  }
+
+  const { videoId, videoTitle, videoChannel, relevanceScore, matchReason } = req.body;
+  if (!videoId) {
+    return res.status(400).json({ error: 'videoId is required' });
+  }
+
+  const oldVideo: EducationalVideo = {
+    id: course.chapters[chIndex].videoId || '',
+    title: course.chapters[chIndex].videoTitle || '',
+    channel: course.chapters[chIndex].videoChannel || '',
+    relevanceScore: course.chapters[chIndex].relevanceScore || 95,
+    embedUrl: `https://www.youtube.com/embed/${course.chapters[chIndex].videoId}`,
+    thumbnailUrl: `https://img.youtube.com/vi/${course.chapters[chIndex].videoId}/mqdefault.jpg`,
+    matchReason: course.chapters[chIndex].videoMatchReason,
+  };
+
+  const existingAlts = course.chapters[chIndex].alternativeVideos || [];
+  const updatedAlts = [oldVideo, ...existingAlts.filter(v => v.id !== videoId && v.id !== oldVideo.id)].slice(0, 3);
+
+  course.chapters[chIndex].videoId = videoId;
+  if (videoTitle) course.chapters[chIndex].videoTitle = videoTitle;
+  if (videoChannel) course.chapters[chIndex].videoChannel = videoChannel;
+  if (relevanceScore) course.chapters[chIndex].relevanceScore = relevanceScore;
+  if (matchReason) course.chapters[chIndex].videoMatchReason = matchReason;
+  course.chapters[chIndex].alternativeVideos = updatedAlts;
+
+  updateCourseInDB(course.id, { chapters: course.chapters });
+  return res.json({ success: true, chapter: course.chapters[chIndex], course });
+});
+
 // ----------------------------------------------------
 // 3. MULTIMODAL ASSESSMENT EVALUATION (GEMINI VISION + RUBRIC)
 // ----------------------------------------------------
@@ -6368,10 +6822,59 @@ if (status == 1) {
 
   return res.json({
     response: aiResponseText,
+    reply: aiResponseText,
     explanationMode,
     codeSnippet,
     conversationId: savedConv.id,
   });
+});
+
+// Alias for /api/tutor/ask used in learning view
+app.post('/api/tutor/ask', async (req: Request, res: Response) => {
+  const { question, courseTitle = 'Course', chapterTitle = '', explanationStyle = 'simple' } = req.body;
+  const explanationMode = explanationStyle === 'detailed' ? 'detailed' : explanationStyle === 'practical' ? 'practical' : 'simple';
+
+  let replyText = '';
+  if (ai) {
+    try {
+      const modeInstruction = explanationMode === 'simple'
+        ? 'Give a concise, simple explanation using clear analogies. Avoid unnecessary jargon.'
+        : explanationMode === 'detailed'
+        ? 'Provide an in-depth, rigorous explanation breaking down mechanisms, architecture, and common pitfalls.'
+        : 'Provide practical, runnable code examples with step-by-step comments.';
+
+      const prompt = `You are AlphaWave AI Tutor.
+Course: ${courseTitle}
+Chapter: ${chapterTitle}
+Student Question: "${question}"
+Explanation Mode: ${explanationMode.toUpperCase()}
+Rule: ${modeInstruction}
+Language specificity: If discussing C, stick strictly to procedural C (no C++ OOP).`;
+
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+        }),
+        15000
+      );
+      replyText = response.text || '';
+    } catch (err: any) {
+      console.warn('[AI Tutor ask notice]:', err?.message);
+    }
+  }
+
+  if (!replyText) {
+    if (explanationMode === 'simple') {
+      replyText = `Here is a clear, simple explanation for **${question}** in ${chapterTitle || courseTitle}:\n\nThink of this concept like an everyday system with input, process, and output. When you understand the purpose before the syntax, the technical steps become much easier to remember.\n\nKey takeaways:\n1. Keep it clear and focused.\n2. Verify each step before moving forward.\n3. Test with a small, concrete example.`;
+    } else if (explanationMode === 'practical') {
+      replyText = `Here is a practical example addressing **${question}**:\n\n\`\`\`c\n// Practical code pattern for ${chapterTitle || courseTitle}\n// Question: ${question}\n\n#include <stdio.h>\n\nint main(void) {\n    printf("Concept validated successfully.\\n");\n    return 0;\n}\n\`\`\`\n\nRun this to inspect how the variables and control flow behave.`;
+    } else {
+      replyText = `In-depth breakdown of **${question}** in ${chapterTitle || courseTitle}:\n\n1. Theoretical Underpinnings: The underlying mechanism depends on deterministic control flow and memory layout.\n2. Architectural Execution: The runtime allocates resources and executes instructions sequentially.\n3. Common Pitfall: Failing to check boundary conditions or uninitialized state.`;
+    }
+  }
+
+  return res.json({ reply: replyText, response: replyText });
 });
 
 // ----------------------------------------------------

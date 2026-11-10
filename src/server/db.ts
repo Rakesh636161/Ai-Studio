@@ -583,7 +583,21 @@ let memoryCache: DBData = {
   otps: [],
   pdfDocuments: [],
   learningProgress: [],
-  certificates: [],
+  certificates: [
+    {
+      id: 'cert_sql_mastery_demo',
+      certificateId: 'CERT-AW-1794-DEMO1',
+      userId: 'user_default_1',
+      userName: 'Mhadev Biradar',
+      courseId: 'course-sql-101',
+      courseTitle: 'Introduction to SQL for Beginners',
+      category: 'Database & SQL',
+      score: 95,
+      issueDate: 'November 8, 2026',
+      verificationUrl: '/verify-certificate/CERT-AW-1794-DEMO1',
+      instructorName: 'AlphaWave AI Academic Board',
+    },
+  ],
   tutorConversations: [],
 };
 

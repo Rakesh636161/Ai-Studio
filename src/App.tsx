@@ -204,6 +204,7 @@ export default function App() {
         />
 
         {/* Public Certificate Verification (Accessible by Anyone!) */}
+        <Route path="/verify-certificate" element={<VerifyCertificatePage />} />
         <Route path="/verify-certificate/:id" element={<VerifyCertificatePage />} />
 
         {/* 8. Profile and Settings */}
