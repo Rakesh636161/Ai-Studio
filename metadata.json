@@ -1,0 +1,6 @@
+{
+  "name": "Course Studio",
+  "description": "A modern, responsive web application for creating and managing professional educational courses using intelligent AI-powered technology.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

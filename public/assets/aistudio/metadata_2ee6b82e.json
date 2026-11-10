@@ -1,0 +1,7 @@
+{
+  "name": "AlphaWave AI Course Generator",
+  "description": "A modern, responsive web application for creating and managing professional educational courses using intelligent AI-powered technology.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
