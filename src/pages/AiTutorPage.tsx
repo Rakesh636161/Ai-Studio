@@ -15,10 +15,13 @@ import {
   Layers,
   ArrowRight,
   Terminal,
+  Trash2,
+  MessageSquare,
 } from 'lucide-react';
 import { Course, User, TutorMessage } from '../types';
 import { Sidebar } from '../components/Sidebar';
 import { Navbar } from '../components/Navbar';
+import { MarkdownView } from '../components/MarkdownView';
 
 interface AiTutorPageProps {
   user: User;
@@ -82,6 +85,32 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
     };
     fetchHistory();
   }, [selectedCourseId]);
+
+  const handleClearChat = async () => {
+    if (!window.confirm('Clear conversation history for this course?')) return;
+    try {
+      const token = localStorage.getItem('coursestudio_token') || user.id;
+      await fetch(`/api/tutor/conversations/${selectedCourseId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: `Conversation reset. I am your AlphaWave AI Tutor for ${selectedCourse?.title || 'academic subjects'}. Ask me any technical doubt or select a topic below.`,
+          explanationMode,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } catch (e) {
+      console.error('Error clearing chat:', e);
+    }
+  };
+
+  const handleQuickAsk = (q: string) => {
+    setQuestionInput(q);
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,45 +257,82 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
                     ))}
                   </select>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleClearChat}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0"
+                  title="Clear Conversation History"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* 3 Explanation Modes */}
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-              <span className="text-[11px] font-bold text-slate-400 uppercase shrink-0">Mode:</span>
-              <button
-                type="button"
-                onClick={() => setExplanationMode('simple')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                  explanationMode === 'simple'
-                    ? 'bg-[#8150E8] text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                }`}
-              >
-                Simple Explanation
-              </button>
-              <button
-                type="button"
-                onClick={() => setExplanationMode('detailed')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                  explanationMode === 'detailed'
-                    ? 'bg-[#8150E8] text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                }`}
-              >
-                Detailed Explanation
-              </button>
-              <button
-                type="button"
-                onClick={() => setExplanationMode('practical')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                  explanationMode === 'practical'
-                    ? 'bg-[#8150E8] text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                }`}
-              >
-                Practical Example (Code)
-              </button>
+            {/* 3 Explanation Modes & Clear */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                <span className="text-[11px] font-bold text-slate-400 uppercase shrink-0">Mode:</span>
+                <button
+                  type="button"
+                  onClick={() => setExplanationMode('simple')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                    explanationMode === 'simple'
+                      ? 'bg-[#8150E8] text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  Simple Explanation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExplanationMode('detailed')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                    explanationMode === 'detailed'
+                      ? 'bg-[#8150E8] text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  Detailed Explanation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExplanationMode('practical')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                    explanationMode === 'practical'
+                      ? 'bg-[#8150E8] text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  Practical Example (Code)
+                </button>
+              </div>
+
+              <span className="text-[10px] text-slate-400 font-medium">
+                Multi-Turn Memory Active
+              </span>
+            </div>
+
+            {/* Quick Starter Chips */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 overflow-x-auto text-[11px]">
+              <span className="text-slate-400 font-bold uppercase shrink-0">Quick Ask:</span>
+              {[
+                'What is 3NF vs BCNF?',
+                'Explain ACID properties with example',
+                'How does TCP 3-way handshake work?',
+                'Difference between Process and Thread',
+                'Write prime generator in Python',
+                'Explain Pinhole Camera Model',
+              ].map((chip, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleQuickAsk(chip)}
+                  className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-950/40 text-slate-600 dark:text-slate-300 transition-colors shrink-0 cursor-pointer"
+                >
+                  {chip}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -295,7 +361,11 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
                           : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80 rounded-tl-none'
                       }`}
                     >
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                      {isUser ? (
+                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                      ) : (
+                        <MarkdownView content={msg.content} />
+                      )}
 
                       {/* Code Snippet attachment */}
                       {msg.codeSnippet && (

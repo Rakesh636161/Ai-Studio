@@ -20,11 +20,12 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  Award,
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { EditCourseModal } from '../components/EditCourseModal';
 import { EditChapterModal } from '../components/EditChapterModal';
-import { User, Course, CourseChapter, VideoRecommendation } from '../types';
+import { User, Course, CourseChapter, VideoRecommendation, FinalExamStatus } from '../types';
 
 interface CourseLayoutPageProps {
   user: User | null;
@@ -53,6 +54,25 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   // Video switcher modal
   const [videoModalChapter, setVideoModalChapter] = useState<CourseChapter | null>(null);
 
+  // Final Comprehensive Assessment status
+  const [examStatus, setExamStatus] = useState<FinalExamStatus | null>(null);
+
+  const fetchExamStatus = async () => {
+    if (!id) return;
+    try {
+      const token = localStorage.getItem('coursestudio_token') || user?.id || 'user_default_1';
+      const res = await fetch(`/api/courses/${id}/final-exam`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExamStatus(data.status);
+      }
+    } catch (e) {
+      console.error('Failed fetching final exam status:', e);
+    }
+  };
+
   const fetchCourse = async () => {
     if (!id) return;
     try {
@@ -68,7 +88,8 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
 
   useEffect(() => {
     fetchCourse();
-  }, [id]);
+    fetchExamStatus();
+  }, [id, user?.id]);
 
   if (!course) {
     return (
@@ -550,6 +571,117 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
               <Play className="w-4 h-4 fill-white" />
               <span>Start Learning</span>
             </button>
+          </div>
+        </div>
+
+        {/* Final Comprehensive Assessment Card (Requirement 4) */}
+        <div className="bg-white rounded-2xl border-2 border-purple-200 shadow-sm p-6 sm:p-8 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                  examStatus?.isPassed
+                    ? 'bg-emerald-500 text-white'
+                    : examStatus?.isUnlocked
+                    ? 'bg-[#8150E8] text-white'
+                    : 'bg-slate-100 text-slate-400 border border-slate-200'
+                }`}
+              >
+                <Award className="w-6 h-6" />
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded border border-purple-200">
+                    Graduation Requirement
+                  </span>
+
+                  {examStatus?.isPassed ? (
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-300">
+                      <Check className="w-3.5 h-3.5" />
+                      Passed ({examStatus.bestScore}%)
+                    </span>
+                  ) : examStatus?.isUnlocked ? (
+                    <span className="text-[11px] font-bold text-purple-800 bg-purple-100 px-2.5 py-0.5 rounded-full border border-purple-300">
+                      Unlocked & Ready
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      Locked (Complete all lectures first)
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-lg font-black text-slate-900">
+                  Final Comprehensive Examination (15 Questions)
+                </h3>
+
+                <p className="text-xs text-slate-600 max-w-xl mt-1 leading-relaxed">
+                  {examStatus?.isPassed
+                    ? `You scored ${examStatus.bestScore}% on the final examination. Your official AlphaWave AI Certificate of Completion has been unlocked.`
+                    : examStatus?.isUnlocked
+                    ? 'All lectures are complete! Take the timed 15-question comprehensive assessment (70% passing threshold) to earn your verified certificate.'
+                    : `Complete all ${course.chapters.length} lectures and pass each 5-question lecture assessment (≥75%) to unlock the final examination.`}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-slate-500 font-medium">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    20 Minutes
+                  </span>
+                  <span>·</span>
+                  <span>15 Questions (All Chapters)</span>
+                  <span>·</span>
+                  <span>Passing Score: 70%</span>
+                  {examStatus?.attemptsCount ? (
+                    <>
+                      <span>·</span>
+                      <span className="text-purple-700 font-bold">Attempts: {examStatus.attemptsCount}</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+              {examStatus?.isPassed ? (
+                <>
+                  <button
+                    onClick={() => navigate('/certificates')}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 text-xs sm:text-sm font-bold text-white rounded-xl shadow-md transition-all hover:opacity-95 cursor-pointer"
+                    style={{ backgroundColor: '#8150E8' }}
+                  >
+                    <Award className="w-4 h-4" />
+                    <span>View Certificate</span>
+                  </button>
+
+                  <button
+                    onClick={() => navigate(`/course/${course.id}/final-exam`)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <span>Review Exam</span>
+                  </button>
+                </>
+              ) : examStatus?.isUnlocked ? (
+                <button
+                  onClick={() => navigate(`/course/${course.id}/final-exam`)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 text-xs sm:text-sm font-black text-white rounded-xl shadow-md transition-all hover:opacity-95 active:scale-95 cursor-pointer animate-pulse"
+                  style={{ backgroundColor: '#8150E8' }}
+                >
+                  <Award className="w-4 h-4" />
+                  <span>Take Final Examination</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate(`/course/${course.id}/start`)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4 text-slate-500" />
+                  <span>Resume Lectures</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

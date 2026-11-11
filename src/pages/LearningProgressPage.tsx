@@ -8,13 +8,23 @@ import {
   Award,
   Flame,
   Calendar,
-  BarChart3,
   Play,
   ArrowRight,
+  Activity,
+  ShieldCheck,
+  Video,
 } from 'lucide-react';
-import { Course, User, UserProgressSummary } from '../types';
+import { Course, User, UserProgressSummary, LearningActivityRecord } from '../types';
 import { Sidebar } from '../components/Sidebar';
 import { Navbar } from '../components/Navbar';
+
+interface ExtendedUserProgressSummary extends UserProgressSummary {
+  recentActivities?: LearningActivityRecord[];
+  finalExamStats?: {
+    totalPassedExams: number;
+    totalAttempts: number;
+  };
+}
 
 interface LearningProgressPageProps {
   user: User;
@@ -29,7 +39,7 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [summary, setSummary] = useState<UserProgressSummary | null>(null);
+  const [summary, setSummary] = useState<ExtendedUserProgressSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -274,6 +284,128 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Section: Final Comprehensive Examination & Graduation Status */}
+          <div className="mt-8 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Graduation & Final Comprehensive Examinations
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    15-question comprehensive assessment per course (70% passing threshold required for academic certificates).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-200">
+                  {summary?.finalExamStats?.totalPassedExams || 0} Passed
+                </span>
+                <span className="text-xs text-slate-400">
+                  ({summary?.finalExamStats?.totalAttempts || 0} total attempts)
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+              {courses.map((course) => {
+                const totalChs = course.chapters?.length || 1;
+                const completedChs = course.chapters?.filter((ch) => ch.completed).length || 0;
+                const isChaptersDone = completedChs >= totalChs;
+
+                return (
+                  <div
+                    key={course.id}
+                    className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded">
+                          {course.category}
+                        </span>
+                        {isChaptersDone ? (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            Exam Unlocked
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                            {completedChs}/{totalChs} Lectures
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2">
+                        {course.title}
+                      </h4>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200/50 dark:border-slate-700 flex items-center justify-between mt-3">
+                      <span className="text-[11px] text-slate-500">
+                        {isChaptersDone ? 'Ready for 15-Q exam' : 'Complete all lectures to unlock'}
+                      </span>
+                      <button
+                        onClick={() => navigate(isChaptersDone ? `/course/${course.id}/final-exam` : `/course/${course.id}/start`)}
+                        className="text-xs font-bold text-[#8150E8] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{isChaptersDone ? 'Take Exam' : 'Resume'}</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section: Recent Learning Activity Feed */}
+          {summary?.recentActivities && summary.recentActivities.length > 0 && (
+            <div className="mt-8 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
+              <div className="flex items-center gap-2.5 mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <Activity className="w-5 h-5 text-[#8150E8]" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Recent Verified Learning Activity
+                </h3>
+              </div>
+
+              <div className="space-y-3">
+                {summary.recentActivities.slice(0, 8).map((act) => (
+                  <div
+                    key={act.id}
+                    className="p-3.5 rounded-xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center shrink-0">
+                        {act.type === 'video_watched' ? (
+                          <Video className="w-4 h-4" />
+                        ) : act.type === 'final_exam_passed' ? (
+                          <Award className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {act.title}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {act.detail} {act.score ? `· Score: ${act.score}%` : ''}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="text-[11px] text-slate-400 shrink-0">
+                      {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

@@ -3,7 +3,23 @@ import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
-import type { Course, CourseChapter, User, PDFDocument, LearningProgress, Certificate, TutorConversation, PlatformAdminStats } from '../types/index.ts';
+import type {
+  Course,
+  CourseChapter,
+  User,
+  PDFDocument,
+  LearningProgress,
+  Certificate,
+  TutorConversation,
+  PlatformAdminStats,
+  FinalExamQuestion,
+  FinalExamAttempt,
+  FinalExamStatus,
+  FinalExamQuestionResult,
+  LearningActivityRecord,
+  StudentCourseProgress,
+  UserProgressSummary,
+} from '../types/index.ts';
 
 export interface DBUser {
   id: string;
@@ -36,6 +52,8 @@ interface DBData {
   learningProgress: LearningProgress[];
   certificates: Certificate[];
   tutorConversations: TutorConversation[];
+  finalExamAttempts: FinalExamAttempt[];
+  learningActivities: LearningActivityRecord[];
 }
 
 
@@ -599,6 +617,8 @@ let memoryCache: DBData = {
     },
   ],
   tutorConversations: [],
+  finalExamAttempts: [],
+  learningActivities: [],
 };
 
 
@@ -859,6 +879,12 @@ function loadLocalFile(): void {
       }
       if (parsed.tutorConversations && Array.isArray(parsed.tutorConversations)) {
         memoryCache.tutorConversations = parsed.tutorConversations;
+      }
+      if (parsed.finalExamAttempts && Array.isArray(parsed.finalExamAttempts)) {
+        memoryCache.finalExamAttempts = parsed.finalExamAttempts;
+      }
+      if (parsed.learningActivities && Array.isArray(parsed.learningActivities)) {
+        memoryCache.learningActivities = parsed.learningActivities;
       }
     }
   } catch {
@@ -1444,6 +1470,525 @@ export function getPlatformStats(): PlatformAdminStats {
     totalPdfDocuments,
     activeLearners,
     recentActivity: recentActivity.slice(0, 15),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// LEARNING ACTIVITIES & PROGRESS ENGINE (Requirement 2 & 4)
+// ---------------------------------------------------------------------------
+
+export function recordLearningActivity(
+  activity: Omit<LearningActivityRecord, 'id' | 'timestamp'>
+): LearningActivityRecord {
+  const newActivity: LearningActivityRecord = {
+    ...activity,
+    id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString(),
+  };
+
+  memoryCache.learningActivities.unshift(newActivity);
+  if (memoryCache.learningActivities.length > 500) {
+    memoryCache.learningActivities = memoryCache.learningActivities.slice(0, 500);
+  }
+
+  syncToDisk();
+  return newActivity;
+}
+
+export function getUserActivities(userId: string, limit = 20): LearningActivityRecord[] {
+  return memoryCache.learningActivities
+    .filter(a => a.userId === userId)
+    .slice(0, limit);
+}
+
+export function trackVideoWatched(userId: string, courseId: string, chapterNumber: number): boolean {
+  const course = getCourseById(courseId);
+  if (!course) return false;
+
+  const chapter = course.chapters.find(c => c.chapterNumber === chapterNumber);
+  if (!chapter) return false;
+
+  recordLearningActivity({
+    userId,
+    courseId,
+    courseTitle: course.title,
+    type: 'video_watched',
+    title: `Watched Lecture: ${chapter.title}`,
+    detail: `Studied video lecture for Chapter ${chapterNumber} (${chapter.duration || '20 mins'})`,
+  });
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// FINAL COMPREHENSIVE ASSESSMENT GENERATION & EVALUATION (Requirement 4)
+// ---------------------------------------------------------------------------
+
+export function generateCourseFinalExamQuestions(courseId: string): FinalExamQuestion[] {
+  const course = getCourseById(courseId);
+  if (!course) return [];
+
+  const chapters = course.chapters || [];
+  const totalChapters = Math.max(1, chapters.length);
+  const targetTotal = 15;
+  const questions: FinalExamQuestion[] = [];
+
+  // Calculate question allocation per chapter to guarantee exactly 15 questions
+  const basePerChapter = Math.floor(targetTotal / totalChapters);
+  const remainder = targetTotal % totalChapters;
+
+  chapters.forEach((chapter, index) => {
+    const quota = basePerChapter + (index < remainder ? 1 : 0);
+    const chNum = chapter.chapterNumber || (index + 1);
+    const chTitle = chapter.title || `Chapter ${chNum}`;
+    const desc = chapter.description || '';
+    const sections = chapter.content?.sections || [];
+    const takeaways = chapter.content?.keyTakeaways || [];
+    const mcqs = chapter.assessment?.mcqs || [];
+
+    // 1. First pull high-yield questions from chapter's existing MCQs
+    mcqs.forEach((mcq, mIdx) => {
+      if (questions.filter(q => q.chapterNumber === chNum).length < quota) {
+        questions.push({
+          id: `fe-${course.id}-ch${chNum}-q${mIdx + 1}`,
+          chapterNumber: chNum,
+          chapterTitle: chTitle,
+          question: mcq.question,
+          options: mcq.options.slice(0, 4),
+          correctAnswerIndex: mcq.correctAnswerIndex,
+          explanation: mcq.explanation || `Correctly tests core understanding of ${chTitle}.`,
+          difficulty: mIdx % 3 === 0 ? 'Basic' : mIdx % 3 === 1 ? 'Intermediate' : 'Advanced',
+        });
+      }
+    });
+
+    // 2. Synthesize rigorous academic conceptual questions from sections & takeaways if needed
+    let secIdx = 0;
+    while (questions.filter(q => q.chapterNumber === chNum).length < quota) {
+      const qNum = questions.filter(q => q.chapterNumber === chNum).length + 1;
+      const sec = sections[secIdx % Math.max(1, sections.length)];
+      const topicName = sec?.title || chTitle;
+      const keyRule = takeaways[secIdx % Math.max(1, takeaways.length)] || desc;
+
+      const qId = `fe-${course.id}-ch${chNum}-syn-${qNum}`;
+      const diff: 'Basic' | 'Intermediate' | 'Advanced' = qNum === 1 ? 'Basic' : qNum === 2 ? 'Intermediate' : 'Advanced';
+
+      let qText = '';
+      let opts: string[] = [];
+      let cIdx = 0;
+      let exp = '';
+
+      if (course.category.toLowerCase().includes('program') || course.title.toLowerCase().includes('sql') || course.title.toLowerCase().includes('dbms')) {
+        if (qNum === 1) {
+          qText = `In ${topicName}, what is the primary architectural purpose of enforcing constraints and keys?`;
+          opts = [
+            'To guarantee data integrity, uniqueness, and prevent anomalous records',
+            'To compress table file size on disk storage',
+            'To restrict queries to running exclusively on weekends',
+            'To eliminate the requirement for primary keys',
+          ];
+          cIdx = 0;
+          exp = 'Keys and constraints enforce referential and entity integrity, preventing invalid or duplicate records.';
+        } else if (qNum === 2) {
+          qText = `When analyzing ${topicName}, which trade-off must be considered during relational schema design?`;
+          opts = [
+            'Increasing query complexity vs decreasing database users',
+            'Balancing redundancy elimination through normalization against multi-table JOIN performance overhead',
+            'Using only text columns vs using only numeric columns',
+            'Ignoring foreign key constraints entirely to improve read speed',
+          ];
+          cIdx = 1;
+          exp = 'Normalization removes redundant data and anomalies, but excessive decomposition introduces JOIN overhead that must be balanced.';
+        } else {
+          qText = `Consider an application utilizing ${chTitle}. What is the recommended strategy when executing irreversible transactional updates?`;
+          opts = [
+            'Execute directly on production without backup',
+            'Verify row counts with an identical SELECT filter before committing UPDATE/DELETE modifications',
+            'Remove all WHERE clauses to optimize execution speed',
+            'Convert relational tables to unstructured binary files',
+          ];
+          cIdx = 1;
+          exp = 'Running a preview SELECT with the identical WHERE predicate guarantees that only the intended records are updated or deleted.';
+        }
+      } else if (course.title.toLowerCase().includes('network') || course.title.toLowerCase().includes('osi')) {
+        qText = `Regarding ${topicName} in Computer Networks, which layer or protocol mechanism guarantees reliability?`;
+        opts = [
+          'TCP flow control, sequence numbering, and acknowledgement packets (SYN/ACK)',
+          'Physical copper wire shielding alone',
+          'Unchecked UDP datagram transmission',
+          'MAC address random number generators',
+        ];
+        cIdx = 0;
+        exp = 'TCP implements end-to-end reliability through sequence numbers, acknowledgements, and window-based flow control.';
+      } else {
+        qText = `Regarding ${chTitle} (${topicName}): Which statement most accurately summarizes the foundational principle taught in this lecture?`;
+        opts = [
+          `${keyRule.slice(0, 95)}`,
+          'Theoretical principles can be ignored in practical implementations without risk',
+          'System architecture should default to unstructured, non-standardized formats',
+          'Only execute processes without validation or error handling',
+        ];
+        cIdx = 0;
+        exp = `Foundational understanding of ${chTitle} requires adhering to verified structural principles and validated standards.`;
+      }
+
+      questions.push({
+        id: qId,
+        chapterNumber: chNum,
+        chapterTitle: chTitle,
+        question: qText,
+        options: opts,
+        correctAnswerIndex: cIdx,
+        explanation: exp,
+        difficulty: diff,
+      });
+
+      secIdx++;
+    }
+  });
+
+  return questions.slice(0, targetTotal);
+}
+
+export function getCourseFinalExamStatus(userId: string, courseId: string): FinalExamStatus {
+  const course = getCourseById(courseId);
+  const userAttempts = memoryCache.finalExamAttempts.filter(
+    a => a.courseId === courseId && a.userId === userId
+  );
+
+  const totalChapters = course?.chapters?.length || 1;
+  const completedChaptersCount = course?.chapters?.filter(c => c.completed).length || 0;
+  const isUnlocked = completedChaptersCount >= totalChapters;
+
+  const passedAttempt = userAttempts.find(a => a.passed);
+  const bestScore = userAttempts.length > 0 ? Math.max(...userAttempts.map(a => a.scorePercentage)) : undefined;
+  const latestAttempt = userAttempts.length > 0 ? userAttempts[userAttempts.length - 1] : undefined;
+
+  let lockReason: string | undefined = undefined;
+  if (!isUnlocked) {
+    const remaining = totalChapters - completedChaptersCount;
+    lockReason = `You must complete all ${totalChapters} lecture chapters and chapter-wise assessments first (${remaining} remaining).`;
+  }
+
+  return {
+    courseId,
+    courseTitle: course?.title || 'Course',
+    isUnlocked,
+    lockReason,
+    completedChaptersCount,
+    totalChaptersCount: totalChapters,
+    attemptsCount: userAttempts.length,
+    bestScore,
+    latestScore: latestAttempt?.scorePercentage,
+    isPassed: !!passedAttempt,
+    latestAttempt,
+    attempts: userAttempts,
+  };
+}
+
+export function submitCourseFinalExam(
+  userId: string,
+  courseId: string,
+  studentAnswers: Record<string, number>,
+  durationSeconds: number
+): { attempt: FinalExamAttempt; status: FinalExamStatus } {
+  const course = getCourseById(courseId);
+  if (!course) {
+    throw new Error('Course not found.');
+  }
+
+  const user = findUserById(userId) || DEFAULT_USER;
+  const totalChapters = course.chapters?.length || 1;
+  const completedChaptersCount = course.chapters?.filter(c => c.completed).length || 0;
+
+  if (completedChaptersCount < totalChapters) {
+    throw new Error(`Final Examination is locked. You must complete all ${totalChapters} chapters before taking the final exam.`);
+  }
+
+  const questions = generateCourseFinalExamQuestions(courseId);
+  const totalQuestions = questions.length; // exactly 15
+
+  let correctCount = 0;
+  let incorrectCount = 0;
+  let unansweredCount = 0;
+
+  const questionResults: FinalExamQuestionResult[] = [];
+  const chapterStats: Record<number, { title: string; total: number; correct: number }> = {};
+
+  questions.forEach(q => {
+    if (!chapterStats[q.chapterNumber]) {
+      chapterStats[q.chapterNumber] = { title: q.chapterTitle, total: 0, correct: 0 };
+    }
+    chapterStats[q.chapterNumber].total++;
+
+    const studentChoice = studentAnswers[q.id] !== undefined ? studentAnswers[q.id] : -1;
+    const isCorrect = studentChoice === q.correctAnswerIndex;
+
+    if (studentChoice === -1) {
+      unansweredCount++;
+    } else if (isCorrect) {
+      correctCount++;
+      chapterStats[q.chapterNumber].correct++;
+    } else {
+      incorrectCount++;
+    }
+
+    questionResults.push({
+      questionId: q.id,
+      chapterNumber: q.chapterNumber,
+      chapterTitle: q.chapterTitle,
+      questionText: q.question,
+      options: q.options,
+      selectedOptionIndex: studentChoice,
+      correctOptionIndex: q.correctAnswerIndex,
+      isCorrect,
+      explanation: q.explanation,
+      difficulty: q.difficulty,
+    });
+  });
+
+  const scorePercentage = Math.round((correctCount / Math.max(1, totalQuestions)) * 100);
+  const passingThreshold = 70; // 70% passing threshold
+  const passed = scorePercentage >= passingThreshold;
+
+  const chapterBreakdown = Object.entries(chapterStats).map(([chNum, stat]) => {
+    const chScore = Math.round((stat.correct / Math.max(1, stat.total)) * 100);
+    return {
+      chapterNumber: parseInt(chNum, 10),
+      chapterTitle: stat.title,
+      totalQuestions: stat.total,
+      correctQuestions: stat.correct,
+      scorePercentage: chScore,
+      needsRevision: chScore < passingThreshold,
+    };
+  });
+
+  const weakChapters = chapterBreakdown.filter(c => c.needsRevision);
+  const recommendedRevisionTopics = weakChapters.map(
+    c => `Chapter ${c.chapterNumber}: ${c.chapterTitle} (${c.scorePercentage}% score - review notes and re-attempt chapter quiz)`
+  );
+
+  const previousAttempts = memoryCache.finalExamAttempts.filter(
+    a => a.courseId === courseId && a.userId === userId
+  );
+
+  const attemptId = `attempt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newAttempt: FinalExamAttempt = {
+    attemptId,
+    attemptNumber: previousAttempts.length + 1,
+    courseId,
+    courseTitle: course.title,
+    userId,
+    studentName: user.name || 'AlphaWave Student',
+    startedAt: new Date(Date.now() - durationSeconds * 1000).toISOString(),
+    submittedAt: new Date().toISOString(),
+    durationSeconds,
+    totalQuestions,
+    correctAnswers: correctCount,
+    incorrectAnswers: incorrectCount,
+    unanswered: unansweredCount,
+    scorePercentage,
+    passingThreshold,
+    passed,
+    answers: studentAnswers,
+    questionResults,
+    chapterBreakdown,
+    recommendedRevisionTopics,
+  };
+
+  memoryCache.finalExamAttempts.push(newAttempt);
+
+  // Record Learning Activity
+  if (passed) {
+    recordLearningActivity({
+      userId,
+      courseId,
+      courseTitle: course.title,
+      type: 'final_exam_passed',
+      title: `Passed Final Examination: ${course.title}`,
+      detail: `Achieved ${scorePercentage}% score (Passing: 70%). Course successfully completed and Certificate unlocked!`,
+      score: scorePercentage,
+    });
+
+    // Update course completion status
+    course.progress = 100;
+    syncToDisk();
+  } else {
+    recordLearningActivity({
+      userId,
+      courseId,
+      courseTitle: course.title,
+      type: 'final_exam_failed',
+      title: `Attempted Final Examination: ${course.title}`,
+      detail: `Scored ${scorePercentage}% (${passingThreshold}% required). ${weakChapters.length} chapters recommended for revision before retake.`,
+      score: scorePercentage,
+    });
+  }
+
+  syncToDisk();
+
+  return {
+    attempt: newAttempt,
+    status: getCourseFinalExamStatus(userId, courseId),
+  };
+}
+
+export function updateChapterAssessment(
+  courseId: string,
+  chapterNumber: number,
+  userId: string,
+  score: number,
+  passed: boolean
+): { course: Course; isComplete: boolean } {
+  const course = getCourseById(courseId);
+  if (!course) {
+    throw new Error('Course not found.');
+  }
+
+  const chapterIndex = course.chapters.findIndex(c => c.chapterNumber === chapterNumber);
+  if (chapterIndex === -1) {
+    throw new Error('Chapter not found.');
+  }
+
+  const chapter = course.chapters[chapterIndex];
+  chapter.assessmentScore = score;
+
+  if (passed) {
+    chapter.completed = true;
+
+    // Unlock next chapter if exists
+    if (chapterIndex + 1 < course.chapters.length) {
+      course.chapters[chapterIndex + 1].isUnlocked = true;
+    }
+
+    recordLearningActivity({
+      userId,
+      courseId,
+      courseTitle: course.title,
+      type: 'quiz_passed',
+      title: `Passed Quiz: Chapter ${chapterNumber}`,
+      detail: `Scored ${score}% on "${chapter.title}" assessment`,
+      score,
+    });
+  }
+
+  const completedCount = course.chapters.filter(c => c.completed).length;
+  course.progress = Math.round((completedCount / course.chapters.length) * 100);
+
+  syncToDisk();
+  return { course, isComplete: completedCount >= course.chapters.length };
+}
+
+export function getAccurateUserProgressSummary(userId: string): UserProgressSummary & {
+  recentActivities: LearningActivityRecord[];
+  finalExamStats: { totalPassedExams: number; totalAttempts: number };
+} {
+  const userCourses = getCoursesForUser(userId);
+  const totalCourses = userCourses.length;
+
+  let completedCourses = 0;
+  let inProgressCourses = 0;
+  let totalChapters = 0;
+  let completedChapters = 0;
+  let totalScoreSum = 0;
+  let totalScoreCount = 0;
+  let totalMinutes = 0;
+
+  userCourses.forEach(c => {
+    const chs = c.chapters || [];
+    totalChapters += chs.length;
+    const completedChs = chs.filter(ch => ch.completed).length;
+    completedChapters += completedChs;
+
+    // Check if final exam passed for this course
+    const examPassed = memoryCache.finalExamAttempts.some(
+      a => a.courseId === c.id && a.userId === userId && a.passed
+    );
+
+    if (completedChs >= chs.length && examPassed) {
+      completedCourses++;
+    } else if (completedChs > 0) {
+      inProgressCourses++;
+    }
+
+    chs.forEach(ch => {
+      // Calculate realistic study time: 25 mins per completed chapter
+      if (ch.completed) {
+        totalMinutes += 25;
+      }
+      if (ch.assessmentScore) {
+        totalScoreSum += ch.assessmentScore;
+        totalScoreCount++;
+      }
+    });
+  });
+
+  // Include final exam scores in score average
+  const userExamAttempts = memoryCache.finalExamAttempts.filter(a => a.userId === userId);
+  userExamAttempts.forEach(a => {
+    totalScoreSum += a.scorePercentage;
+    totalScoreCount++;
+    totalMinutes += Math.round(a.durationSeconds / 60);
+  });
+
+  const overallScoreAverage = totalScoreCount > 0 ? Math.round(totalScoreSum / totalScoreCount) : 85;
+
+  // Calculate real activity counts for the last 7 calendar days
+  const today = new Date();
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weeklyActivity: Array<{ day: string; minutes: number; chapters: number }> = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() - i);
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const dayName = dayNames[targetDate.getDay()];
+
+    const daysActivities = memoryCache.learningActivities.filter(
+      a => a.userId === userId && a.timestamp.startsWith(dateStr)
+    );
+
+    const chaptersCompleted = daysActivities.filter(a => a.type === 'quiz_passed' || a.type === 'chapter_completed').length;
+    const minutesSpent = chaptersCompleted * 25 + daysActivities.filter(a => a.type === 'video_watched').length * 20;
+
+    weeklyActivity.push({
+      day: dayName,
+      minutes: Math.max(daysActivities.length > 0 ? 15 : 0, minutesSpent),
+      chapters: chaptersCompleted,
+    });
+  }
+
+  // Calculate active streak
+  const userActivities = getUserActivities(userId, 50);
+  let streakDays = 0;
+  if (userActivities.length > 0) {
+    const activeDates = new Set(userActivities.map(a => a.timestamp.split('T')[0]));
+    let checkDate = new Date();
+    while (activeDates.has(checkDate.toISOString().split('T')[0])) {
+      streakDays++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    if (streakDays === 0) streakDays = 1; // at least 1 day active today
+  } else {
+    streakDays = 0;
+  }
+
+  return {
+    totalCourses,
+    completedCourses,
+    inProgressCourses,
+    totalChapters,
+    completedChapters,
+    totalLearningMinutes: totalMinutes,
+    overallScoreAverage,
+    currentStreakDays: Math.max(1, streakDays),
+    streakDays: Math.max(1, streakDays),
+    weeklyActivity,
+    recentActivities: userActivities.slice(0, 10),
+    finalExamStats: {
+      totalPassedExams: userExamAttempts.filter(a => a.passed).length,
+      totalAttempts: userExamAttempts.length,
+    },
   };
 }
 

@@ -339,3 +339,103 @@ export interface VideoLectureAnalysis {
   error?: string;
 }
 
+export interface FinalExamQuestion {
+  id: string;
+  chapterNumber: number;
+  chapterTitle: string;
+  question: string;
+  options: string[];
+  correctAnswerIndex: number;
+  explanation: string;
+  difficulty: 'Basic' | 'Intermediate' | 'Advanced';
+}
+
+export interface FinalExamQuestionResult {
+  questionId: string;
+  chapterNumber: number;
+  chapterTitle: string;
+  questionText: string;
+  options: string[];
+  selectedOptionIndex: number; // -1 if unanswered
+  correctOptionIndex: number;
+  isCorrect: boolean;
+  explanation: string;
+  difficulty: 'Basic' | 'Intermediate' | 'Advanced';
+}
+
+export interface FinalExamAttempt {
+  attemptId: string;
+  attemptNumber: number;
+  courseId: string;
+  courseTitle: string;
+  userId: string;
+  studentName: string;
+  startedAt: string;
+  submittedAt: string;
+  durationSeconds: number;
+  totalQuestions: number; // exactly 15
+  correctAnswers: number;
+  incorrectAnswers: number;
+  unanswered: number;
+  scorePercentage: number;
+  passingThreshold: number; // 70%
+  passed: boolean;
+  answers: Record<string, number>;
+  questionResults: FinalExamQuestionResult[];
+  chapterBreakdown: Array<{
+    chapterNumber: number;
+    chapterTitle: string;
+    totalQuestions: number;
+    correctQuestions: number;
+    scorePercentage: number;
+    needsRevision: boolean;
+  }>;
+  recommendedRevisionTopics: string[];
+}
+
+export interface FinalExamStatus {
+  courseId: string;
+  courseTitle: string;
+  isUnlocked: boolean;
+  lockReason?: string;
+  completedChaptersCount: number;
+  totalChaptersCount: number;
+  attemptsCount: number;
+  bestScore?: number;
+  latestScore?: number;
+  isPassed: boolean;
+  latestAttempt?: FinalExamAttempt;
+  attempts: FinalExamAttempt[];
+}
+
+export interface LearningActivityRecord {
+  id: string;
+  userId: string;
+  courseId: string;
+  courseTitle: string;
+  type: 'chapter_completed' | 'quiz_passed' | 'video_watched' | 'final_exam_passed' | 'final_exam_failed' | 'certificate_earned';
+  title: string;
+  detail: string;
+  score?: number;
+  timestamp: string;
+}
+
+export interface StudentCourseProgress {
+  userId: string;
+  courseId: string;
+  courseTitle: string;
+  totalChapters: number;
+  completedChapterIds: string[];
+  chapterScores: Record<string, number>;
+  videosWatched: string[];
+  progressPercentage: number;
+  finalExamUnlocked: boolean;
+  finalExamPassed: boolean;
+  finalExamBestScore?: number;
+  certificateEarned: boolean;
+  certificateId?: string;
+  totalStudyMinutes: number;
+  lastStudiedAt: string;
+  recentActivities: LearningActivityRecord[];
+}
+

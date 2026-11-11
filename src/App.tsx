@@ -22,6 +22,7 @@ import { ProfileSettingsPage } from './pages/ProfileSettingsPage';
 import { HelpSupportPage } from './pages/HelpSupportPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { VideoAnalysisPage } from './pages/VideoAnalysisPage';
+import { FinalExamPage } from './pages/FinalExamPage';
 import { User, Course } from './types';
 
 export default function App() {
@@ -314,6 +315,18 @@ export default function App() {
         <Route
           path="/course/:id/start"
           element={<CourseLearningPage />}
+        />
+
+        {/* Final Comprehensive Assessment (15 Questions) */}
+        <Route
+          path="/course/:id/final-exam"
+          element={
+            user ? (
+              <FinalExamPage user={user} onRefreshCourses={fetchCourses} />
+            ) : (
+              <Navigate to="/auth" replace />
+            )
+          }
         />
 
         {/* Fallback */}

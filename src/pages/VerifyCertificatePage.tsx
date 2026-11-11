@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Certificate } from '../types';
 import { Logo } from '../components/Logo';
+import { CertificateView } from '../components/CertificateView';
 
 export const VerifyCertificatePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -134,7 +135,7 @@ export const VerifyCertificatePage: React.FC = () => {
             <p className="text-xs text-slate-400 mt-1">Checking AlphaWave AI cryptographic verification ledger...</p>
           </div>
         ) : cert ? (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-lg space-y-6">
+          <div className="space-y-6">
             {/* Status Banner */}
             <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -146,7 +147,7 @@ export const VerifyCertificatePage: React.FC = () => {
                     Verified Authentic Certificate
                   </h3>
                   <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                    Officially issued by AlphaWave AI following verified assessment completion.
+                    Officially issued by AlphaWave AI following verified course and examination completion.
                   </p>
                 </div>
               </div>
@@ -159,8 +160,13 @@ export const VerifyCertificatePage: React.FC = () => {
               </button>
             </div>
 
+            {/* Official Academic Certificate Diploma */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-8 shadow-xl">
+              <CertificateView certificate={cert} showActions={false} />
+            </div>
+
             {/* Credential Details */}
-            <div className="space-y-4 pt-2">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
@@ -202,7 +208,7 @@ export const VerifyCertificatePage: React.FC = () => {
                     </p>
                     <button
                       onClick={copyCertId}
-                      className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors"
+                      className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors cursor-pointer"
                       title="Copy ID"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}

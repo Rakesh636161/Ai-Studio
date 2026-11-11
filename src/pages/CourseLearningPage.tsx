@@ -26,6 +26,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { Course, CourseChapter, VideoRecommendation } from '../types';
+import { MarkdownView } from '../components/MarkdownView';
 
 export const CourseLearningPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -104,6 +105,17 @@ export const CourseLearningPage: React.FC = () => {
       setAssessmentResult(null);
     }
   }, [selectedChapterIndex, currentChapter?.id]);
+
+  // Track video watched for accurate learning progress tracking
+  useEffect(() => {
+    if (course?.id && currentChapter && currentChapter.isUnlocked && currentChapter.videoId) {
+      const token = localStorage.getItem('coursestudio_token') || 'user_default_1';
+      fetch(`/api/courses/${course.id}/chapters/${currentChapter.chapterNumber}/track-video`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
+  }, [course?.id, currentChapter?.chapterNumber, currentChapter?.isUnlocked]);
 
   const handleSelectVideo = async (video: VideoRecommendation) => {
     if (!course || !currentChapter) return;
@@ -1055,15 +1067,21 @@ export const CourseLearningPage: React.FC = () => {
                       setSelectedChapterIndex(selectedChapterIndex + 1);
                       setAssessmentResult(null);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
+                    } else if (completedCount >= course.chapters.length) {
+                      navigate(`/course/${course.id}/final-exam`);
                     } else {
                       navigate(`/course/${course.id}`);
                     }
                   }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white rounded-xl shadow-xs transition-transform active:scale-95"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
                   style={{ backgroundColor: '#8150E8' }}
                 >
                   <span className="hidden sm:inline">
-                    {selectedChapterIndex < course.chapters.length - 1 ? 'Next Lecture' : 'Finish Course'}
+                    {selectedChapterIndex < course.chapters.length - 1
+                      ? 'Next Lecture'
+                      : completedCount >= course.chapters.length
+                      ? 'Take Final Exam (15 Questions)'
+                      : 'Course Layout'}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
@@ -1266,7 +1284,11 @@ export const CourseLearningPage: React.FC = () => {
                           : 'bg-slate-100 text-slate-800 rounded-bl-xs'
                       }`}
                     >
-                      {msg.text}
+                      {msg.sender === 'user' ? (
+                        <span>{msg.text}</span>
+                      ) : (
+                        <MarkdownView content={msg.text} />
+                      )}
                     </div>
                   </div>
                 ))
