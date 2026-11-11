@@ -15,6 +15,7 @@ import {
   Moon,
   Sun,
   ShieldCheck,
+  Video,
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { Course, User } from '../types';
@@ -64,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'AI Course Generator', path: '/create-course', icon: Sparkles },
     { name: 'My Courses', path: '/my-courses', icon: BookOpen, badge: createdCount },
+    { name: 'Video Analyzer', path: '/video-analysis', icon: Video },
     { name: 'PDF to Course', path: '/pdf-to-course', icon: FileText },
     { name: 'AI Tutor', path: '/ai-tutor', icon: Bot },
     { name: 'Learning Progress', path: '/progress', icon: TrendingUp },

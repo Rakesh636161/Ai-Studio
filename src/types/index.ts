@@ -294,3 +294,48 @@ export interface PlatformAdminStats {
   }>;
 }
 
+export interface VideoLectureAnalysis {
+  id: string;
+  processingId: string;
+  fileName: string;
+  fileSize: number;
+  durationSeconds: number;
+  durationFormatted: string;
+  isEnglish: boolean;
+  detectedLanguage: string;
+  languageConfidence: number;
+  subject:
+    | 'DBMS'
+    | 'Computer Networks'
+    | 'Operating Systems'
+    | 'Computer Vision'
+    | 'Data Structures and Algorithms'
+    | 'Python Programming'
+    | 'Java Programming'
+    | 'Software Engineering'
+    | 'Artificial Intelligence'
+    | 'Machine Learning'
+    | 'Other Academic';
+  moduleName: string;
+  specificTopic: string;
+  lectureTitle: string;
+  confidenceScore: number;
+  visualEvidence: string[];
+  keyConcepts: string[];
+  detailedSummary: string;
+  structuredNotes: string;
+  practiceQuestions: Array<{
+    id: string;
+    type: 'mcq' | 'written';
+    question: string;
+    options?: string[];
+    correctAnswerIndex?: number;
+    explanation?: string;
+    expectedKeyPoints?: string[];
+    rubric?: string;
+  }>;
+  recommendedEnglishVideos: EducationalVideo[];
+  analyzedAt: string;
+  error?: string;
+}
+

@@ -115,15 +115,19 @@ export const CourseLearningPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoId: video.id || video.videoId,
+          videoTitle: video.title,
           title: video.title,
+          videoChannel: video.channel || video.channelTitle,
           channel: video.channel || video.channelTitle,
           thumbnailUrl: video.thumbnailUrl,
+          relevanceScore: video.relevanceScore,
           score: video.relevanceScore,
           matchReason: video.matchReason,
         }),
       });
       if (res.ok) {
-        const updatedCourse = await res.json();
+        const data = await res.json();
+        const updatedCourse = data.course || data;
         setCourse(updatedCourse);
         setShowVideoModal(false);
       }

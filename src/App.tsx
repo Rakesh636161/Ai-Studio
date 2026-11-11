@@ -21,6 +21,7 @@ import { VerifyCertificatePage } from './pages/VerifyCertificatePage';
 import { ProfileSettingsPage } from './pages/ProfileSettingsPage';
 import { HelpSupportPage } from './pages/HelpSupportPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { VideoAnalysisPage } from './pages/VideoAnalysisPage';
 import { User, Course } from './types';
 
 export default function App() {
@@ -144,6 +145,23 @@ export default function App() {
           element={
             user ? (
               <PdfToCoursePage
+                user={user}
+                courses={courses}
+                onRefreshCourses={fetchCourses}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate to="/auth" replace />
+            )
+          }
+        />
+
+        {/* 4.5 Video Lecture Analyzer & Subject Detection */}
+        <Route
+          path="/video-analysis"
+          element={
+            user ? (
+              <VideoAnalysisPage
                 user={user}
                 courses={courses}
                 onRefreshCourses={fetchCourses}

@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
-import { Course, CourseChapter, User, PDFDocument, LearningProgress, Certificate, TutorConversation, PlatformAdminStats } from '../types';
+import type { Course, CourseChapter, User, PDFDocument, LearningProgress, Certificate, TutorConversation, PlatformAdminStats } from '../types/index.ts';
 
 export interface DBUser {
   id: string;

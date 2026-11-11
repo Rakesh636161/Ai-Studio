@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, MoreVertical, Play, Eye, Trash2, Edit3, Sparkles, Code2, HeartPulse, Palette, Briefcase, Cpu, Lock, Camera, FileText, CheckCircle2, ExternalLink, X } from 'lucide-react';
+import { Plus, BookOpen, MoreVertical, Play, Eye, Trash2, Edit3, Sparkles, Code2, HeartPulse, Palette, Briefcase, Cpu, Lock, Camera, FileText, CheckCircle2, ExternalLink, X, Video } from 'lucide-react';
 import { Course, User, PDFDocument } from '../types';
 import { Sidebar } from '../components/Sidebar';
 import { Navbar } from '../components/Navbar';
@@ -217,14 +217,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={() => navigate('/create-course')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white rounded-xl shadow-xs transition-all hover:opacity-95 active:scale-95 shrink-0"
-              style={{ backgroundColor: '#8150E8' }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Create AI Course</span>
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => navigate('/video-analysis')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#8150E8] bg-purple-50 hover:bg-purple-100/80 border border-purple-200 rounded-xl transition-all active:scale-95 shrink-0 cursor-pointer"
+              >
+                <Video className="w-4 h-4 text-[#8150E8]" />
+                <span>Video Analyzer</span>
+              </button>
+
+              <button
+                onClick={() => navigate('/create-course')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white rounded-xl shadow-xs transition-all hover:opacity-95 active:scale-95 shrink-0 cursor-pointer"
+                style={{ backgroundColor: '#8150E8' }}
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Create AI Course</span>
+              </button>
+            </div>
           </div>
 
           {/* Dashboard Tab Selector */}
@@ -254,6 +264,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             >
               <FileText className="w-3.5 h-3.5" />
               <span>PDF Learning & Syllabus ({pdfDocuments.length})</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/video-analysis')}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-50/70 hover:bg-purple-100 border border-purple-200/60 ml-auto transition-all cursor-pointer"
+            >
+              <Video className="w-3.5 h-3.5 text-[#8150E8]" />
+              <span className="hidden sm:inline">Analyze Video Lecture</span>
+              <span className="sm:hidden">Analyze</span>
             </button>
           </div>
 
