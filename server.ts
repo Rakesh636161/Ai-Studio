@@ -2128,7 +2128,7 @@ Return JSON schema:
 
       const aiResponse = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
@@ -5590,7 +5590,7 @@ JSON schema:
 }`;
       const aiRes = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: p,
           config: { responseMimeType: 'application/json' },
         }),
@@ -5725,7 +5725,7 @@ JSON schema:
 }`;
       const aiRes = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: p,
           config: { responseMimeType: 'application/json' },
         }),
@@ -6583,7 +6583,7 @@ MANDATORY JSON RESPONSE FORMAT:
 
         const aiResponse = await withTimeout(
           ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.8-flash',
             contents: prompt,
             config: {
               responseMimeType: 'application/json',
@@ -8068,13 +8068,13 @@ ${chapterNotes ? `Available lecture notes excerpt:\n${chapterNotes.slice(0, 1500
 
       const response = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents,
           config: {
             systemInstruction,
           },
         }),
-        3500
+        8000
       );
 
       aiResponseText = response.text || '';
