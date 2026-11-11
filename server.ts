@@ -48,6 +48,7 @@ import {
   deleteTutorConversation,
   getAllUsers,
   getPlatformStats,
+  getAdminTelemetryData,
   generateCourseFinalExamQuestions,
   getCourseFinalExamStatus,
   submitCourseFinalExam,
@@ -1610,16 +1611,24 @@ function authenticateUser(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Authorized Developer Admin Account (Strict Developer Control)
-const AUTHORIZED_DEVELOPER_EMAIL = (process.env.DEVELOPER_ADMIN_EMAIL || 'hdsagar65@gmail.com').toLowerCase().trim();
+// Authorized Developer Admin Account (Strict Developer Control via ADMIN_EMAIL)
+function getAdminEmail(): string {
+  return (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+}
+
+function isDeveloperAdmin(user: { email?: string } | null | undefined): boolean {
+  const adminEmail = getAdminEmail();
+  if (!adminEmail || !user || !user.email) return false;
+  return user.email.toLowerCase().trim() === adminEmail;
+}
 
 // Strict Admin Authorization Middleware (Rejects non-developer accounts with 403 Forbidden)
 function authenticateAdmin(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
-  if (!user || !user.email || user.email.toLowerCase().trim() !== AUTHORIZED_DEVELOPER_EMAIL) {
+  if (!isDeveloperAdmin(user)) {
     return res.status(403).json({
       success: false,
-      error: 'Access denied. The Admin Portal is restricted exclusively to the authorized developer account (hdsagar65@gmail.com).',
+      error: 'Access denied. The Admin Portal is restricted exclusively to the authorized developer account.',
     });
   }
   next();
@@ -1790,6 +1799,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Invalid email or password. Please try again.' });
   }
 
+  const isAdmin = isDeveloperAdmin(user);
   return res.json({
     token: user.id,
     user: {
@@ -1798,6 +1808,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       email: user.email,
       avatarUrl: user.avatarUrl,
       coursesCreated: user.coursesCreated,
+      isAdmin,
     },
   });
 });
@@ -1815,6 +1826,7 @@ app.post('/api/auth/google', (req: Request, res: Response) => {
     user = createUser(name || email.split('@')[0], email, crypto.randomBytes(16).toString('hex'), avatarUrl);
   }
 
+  const isAdmin = isDeveloperAdmin(user);
   return res.json({
     token: user.id,
     user: {
@@ -1823,6 +1835,7 @@ app.post('/api/auth/google', (req: Request, res: Response) => {
       email: user.email,
       avatarUrl: user.avatarUrl,
       coursesCreated: user.coursesCreated,
+      isAdmin,
     },
   });
 });
@@ -1833,6 +1846,7 @@ app.get('/api/auth/me', authenticateUser, (req: Request, res: Response) => {
   if (!user) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
+  const isAdmin = isDeveloperAdmin(user);
   return res.json({
     user: {
       id: user.id,
@@ -1840,8 +1854,16 @@ app.get('/api/auth/me', authenticateUser, (req: Request, res: Response) => {
       email: user.email,
       avatarUrl: user.avatarUrl,
       coursesCreated: user.coursesCreated,
+      isAdmin,
     },
   });
+});
+
+// GET /api/admin/check-access (Direct backend verification of developer admin authorization)
+app.get('/api/admin/check-access', authenticateUser, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const isAdmin = isDeveloperAdmin(user);
+  return res.json({ isAdmin });
 });
 
 // PATCH /api/auth/profile
@@ -5612,12 +5634,13 @@ app.delete('/api/courses/:id', authenticateUser, (req: Request, res: Response) =
     return res.status(404).json({ error: 'Course not found' });
   }
 
-  if (course.userId !== user.id) {
+  const isAdmin = isDeveloperAdmin(user);
+  if (course.userId !== user.id && !isAdmin) {
     return res.status(403).json({ error: 'Unauthorized: You can only delete courses you created.' });
   }
 
   const deleted = deleteCourseFromDB(course.id, user.id);
-  return res.json({ success: deleted });
+  return res.json({ success: deleted, message: 'Course and all associated learning data permanently deleted.' });
 });
 
 // GET /api/courses/:id/chapters
@@ -7414,6 +7437,13 @@ function generatePedagogicalResponse(
     return { text: `The Chief Minister of Tamil Nadu is **M. K. Stalin**.` };
   }
 
+  // Climate Change & Global Warming
+  if (q.includes('climate change') || q.includes('global warming')) {
+    return {
+      text: `**Climate Change** refers to long-term shifts in global temperatures and weather patterns over decades or centuries. While Earth's climate has naturally fluctuated throughout geological history, modern climate change since the mid-19th century is predominantly driven by human activities.\n\n### Primary Drivers:\n- **Greenhouse Gas Emissions**: Burning fossil fuels (coal, oil, natural gas) for electricity, transportation, and industry releases carbon dioxide ($CO_2$) and methane ($CH_4$).\n- **Deforestation**: Clearing forests reduces the planet's capacity to absorb carbon dioxide from the atmosphere.\n- **Industrial Agriculture**: Livestock production and synthetic fertilizers contribute significant methane and nitrous oxide emissions.\n\n### Major Consequences:\n1. **Rising Global Temperatures**: Average global temperatures have risen by approximately $1.2^\\circ\\text{C}$ compared to pre-industrial levels.\n2. **Extreme Weather Events**: Intensified hurricanes, prolonged droughts, catastrophic floods, and heatwaves.\n3. **Melting Ice & Sea Level Rise**: Glaciers and polar ice caps are melting, causing sea levels to rise and threatening coastal ecosystems.\n4. **Biodiversity Loss**: Coral reef bleaching and habitat disruption accelerating species extinction rates.\n\n### Solutions & Mitigation:\n- Accelerating the transition to renewable energy (solar, wind, hydroelectric, and nuclear).\n- Energy efficiency in buildings, electric mobility, and grid storage.\n- Reforestation, regenerative agriculture, and international agreements like the Paris Accord.`,
+    };
+  }
+
   // Biology: Photosynthesis
   if (q.includes('photosynthesis')) {
     return {
@@ -7450,6 +7480,100 @@ Photosynthesis is the foundational energy source for virtually all terrestrial a
 | **Transition of Power** | Peaceful institutional transitions determined by voter ballots. | Often unstable, violent, or dependent on armed coups, internal purges, or dynastic succession. |
 
 *Examples:* Democratic states include India, the United States, Japan, and Germany; historical dictatorships include Nazi Germany under Adolf Hitler and fascist Italy under Benito Mussolini.`,
+    };
+  }
+
+  // Python Program to check prime number
+  if (q.includes('prime') && (q.includes('python') || q.includes('program') || q.includes('code') || q.includes('check'))) {
+    return {
+      text: `Here is an efficient, clean Python program to check whether a given integer is a prime number:\n\n\`\`\`python
+import math
+
+def is_prime(n: int) -> bool:
+    """Check if a number is prime using the O(sqrt(n)) trial division method."""
+    if n <= 1:
+        return False
+    if n in (2, 3):
+        return True
+    if n % 2 == 0 or n % 3 == 0:
+        return False
+    
+    # Check divisors up to sqrt(n) skipping multiples of 2 and 3
+    limit = int(math.isqrt(n))
+    for i in range(5, limit + 1, 6):
+        if n % i == 0 or n % (i + 2) == 0:
+            return False
+    return True
+
+# Test cases
+if __name__ == "__main__":
+    test_numbers = [1, 2, 17, 25, 29, 97, 100]
+    for num in test_numbers:
+        print(f"{num}: {'Prime' if is_prime(num) else 'Not Prime'}")
+\`\`\`\n\n### Complexity Analysis:\n- **Time Complexity**: $O(\\sqrt{N})$, since any composite factor pair must have at least one factor $\\le \\sqrt{N}$.\n- **Space Complexity**: $O(1)$ auxiliary memory.`,
+    };
+  }
+
+  // Python Program to check palindrome
+  if (q.includes('palindrome') && (q.includes('python') || q.includes('code') || q.includes('program') || q.includes('check'))) {
+    return {
+      text: `Here is a complete Python program to check if a string or number is a palindrome:\n\n\`\`\`python
+def is_palindrome_string(s: str) -> bool:
+    # Filter only alphanumeric characters and convert to lowercase
+    cleaned = ''.join(c.lower() for c in s if c.isalnum())
+    return cleaned == cleaned[::-1]
+
+def is_palindrome_number(x: int) -> bool:
+    if x < 0:
+        return False
+    s = str(x)
+    return s == s[::-1]
+
+# Tests
+print(is_palindrome_string("A man, a plan, a canal: Panama"))  # True
+print(is_palindrome_string("hello"))                           # False
+print(is_palindrome_number(121))                               # True
+\`\`\`\n\n- **Time Complexity**: $O(N)$ linear time.\n- **Space Complexity**: $O(N)$ for string filtering.`,
+    };
+  }
+
+  // Python Fibonacci Series
+  if (q.includes('fibonacci') && (q.includes('python') || q.includes('code') || q.includes('program') || q.includes('series'))) {
+    return {
+      text: `Here are two ways to implement Fibonacci numbers in Python:\n\n### 1. Generate First N Fibonacci Numbers (Iterative - Recommended)\n\`\`\`python
+def fibonacci_series(n: int) -> list[int]:
+    if n <= 0:
+        return []
+    if n == 1:
+        return [0]
+    
+    series = [0, 1]
+    for _ in range(2, n):
+        series.append(series[-1] + series[-2])
+    return series
+
+print(fibonacci_series(10))
+# Output: [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+\`\`\`\n\n### 2. Nth Fibonacci Number (O(1) Space)\n\`\`\`python
+def nth_fibonacci(n: int) -> int:
+    if n <= 0:
+        return 0
+    if n == 1:
+        return 1
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b
+
+print(nth_fibonacci(10))  # Output: 55
+\`\`\``,
+    };
+  }
+
+  // Study Tips and Exam Preparation
+  if (q.includes('exam') && (q.includes('study') || q.includes('prepare') || q.includes('tips') || q.includes('how to'))) {
+    return {
+      text: `Here is a high-yield, scientifically proven framework for exam preparation:\n\n1. **Active Recall**: Instead of passively reading notes, close your eyes and explain the concept aloud, or write down core formulas and theorems from memory.\n2. **Spaced Repetition**: Review difficult topics on Day 1, Day 3, Day 7, and Day 14. This prevents the brain's forgetting curve from erasing conceptual details.\n3. **Feynman Technique**: Explain topics in plain, simple English without jargon. If you get stuck, that reveals your exact learning blind spot.\n4. **Timed Practice with Past Questions**: Take mock exam sessions matching real exam durations to master pacing and question analysis.\n5. **Sleep & Cognitive Rest**: Aim for 7–8 hours of restful sleep before exams; deep sleep is required for neural consolidation of memories.`,
     };
   }
 
@@ -8390,9 +8514,10 @@ app.post('/api/tutor/chat', authenticateUser, async (req: Request, res: Response
     return res.status(400).json({ error: 'Question is required.' });
   }
 
-  const course = courseId !== 'general' ? getCourseById(courseId) : null;
-  const courseTitle = course?.title || 'Computer Science & Technology';
-  const courseCategory = course?.category || 'Academic';
+  const isGeneralMode = !courseId || courseId === 'general';
+  const course = !isGeneralMode ? getCourseById(courseId) : null;
+  const courseTitle = course?.title || 'General Knowledge & Mentorship';
+  const courseCategory = course?.category || 'General';
 
   // Find relevant chapter notes if available
   const currentChapter = course?.chapters.find(ch =>
@@ -8417,17 +8542,18 @@ app.post('/api/tutor/chat', authenticateUser, async (req: Request, res: Response
         ? 'Provide an in-depth, university-grade academic breakdown covering definitions, theoretical underpinnings, architectural mechanisms, formulas, and common pitfalls.'
         : 'Provide practical, production-quality runnable code examples with step-by-step comments, expected output, and edge case handling.';
 
+      const contextSection = course
+        ? `Context:\nCourse: "${courseTitle}" (${courseCategory})\nChapter: "${chapterTitle || 'General Curriculum'}"\n${chapterNotes ? `Available lecture notes excerpt:\n${chapterNotes.slice(0, 1500)}` : ''}`
+        : `Context: General Knowledge & Mentorship Mode.\nThe student is asking a general question. Answer across any subject (geography, current affairs, science, politics, coding, mathematics, philosophy) accurately and naturally without forcing Computer Science or database concepts.`;
+
       const systemInstruction = `You are AlphaWave AI Tutor, an exceptionally intelligent, friendly, and patient personal AI learning mentor.
 Your primary objective is to understand the student's exact question and intent, and respond with the most natural, accurate, and helpful answer.
 
 CRITICAL INTENT RULES:
 1. GENERAL KNOWLEDGE & FACTUAL QUESTIONS:
-   If the student asks a general knowledge, geography, history, or factual question (e.g., "What is the capital of India?", "What is the capital of Karnataka?", "Who is the President of India?", "What is the speed of light?"):
-   - ANSWER DIRECTLY AND ACCURATELY in 1 to 2 clear, concise sentences.
-   - NEVER generate generic computer science headings, state-machine templates, or irrelevant technical breakdowns for non-technical questions!
-   - Example:
-     User: "What is the capital of India?"
-     Response: "The capital of India is New Delhi."
+   If the student asks a general knowledge, geography, history, or factual question (e.g., "What is the capital of India?", "What is the capital of Karnataka?", "Who is the President of India?", "What is climate change?"):
+   - ANSWER DIRECTLY AND ACCURATELY in clear, natural prose.
+   - NEVER generate generic computer science headings, database schemas, state-machine templates, or irrelevant technical breakdowns for non-technical questions!
 
 2. CASUAL CONVERSATION:
    If the student sends greetings or conversational messages ("Hi", "Hello", "How are you?"):
@@ -8435,7 +8561,7 @@ CRITICAL INTENT RULES:
 
 3. FOLLOW-UP QUESTIONS & ANALOGIES:
    If the student asks "Explain it with a simple example" or "Can you give an example?":
-   - Inspect the prior conversation turns and explain that specific topic using an intuitive, memorable real-world analogy (e.g., student spreadsheets for normalization, certified mail vs shouting across a room for TCP vs UDP).
+   - Inspect the prior conversation turns and explain that specific topic using an intuitive, memorable real-world analogy.
 
 4. PROGRAMMING QUESTIONS:
    If asked to write code (e.g., "Write a Python program to check whether a number is prime"):
@@ -8446,10 +8572,7 @@ CRITICAL INTENT RULES:
    - Respect the requested explanation mode: ${explanationMode.toUpperCase()}. (${modeInstruction})
    - Structure using clean Markdown with clear definitions, core mechanics, examples, and key takeaways.
 
-Context:
-Course: "${courseTitle}" (${courseCategory})
-Chapter: "${chapterTitle || 'General Curriculum'}"
-${chapterNotes ? `Available lecture notes excerpt:\n${chapterNotes.slice(0, 1500)}` : ''}`;
+${contextSection}`;
 
       // Build multi-turn contents array
       const contents: any[] = [];
@@ -8576,24 +8699,22 @@ app.post('/api/tutor/ask', async (req: Request, res: Response) => {
 
 // GET /api/admin/stats - Admin telemetry and system status (Authorized developer only)
 app.get('/api/admin/stats', authenticateUser, authenticateAdmin, (_req: Request, res: Response) => {
-  const stats = getPlatformStats();
-  const users = getAllUsers().map(u => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    coursesCreated: u.coursesCreated || 0,
-    createdAt: u.createdAt,
-  }));
+  const telemetry = getAdminTelemetryData();
 
   return res.json({
-    stats,
-    users,
+    stats: telemetry.stats,
+    users: telemetry.users,
+    courses: telemetry.courses,
+    recentlyRegisteredUsers: telemetry.recentlyRegisteredUsers,
+    recentlyCreatedCourses: telemetry.recentlyCreatedCourses,
     systemStatus: {
       serverTime: new Date().toISOString(),
+      adminEmailConfigured: !!getAdminEmail(),
       geminiConnected: !!ai,
       youtubeApiConfigured: !!(YOUTUBE_API_KEY && YOUTUBE_API_KEY.startsWith('AIzaSy')),
-      databaseEngine: 'Local Persistent JSON + Neon PostgreSQL Sync',
-      activeMemoryCacheCourses: stats.totalCourses,
+      databaseEngine: 'Local Persistent JSON Storage',
+      totalUsersCount: telemetry.stats.totalUsers,
+      totalCoursesCount: telemetry.stats.totalCourses,
     },
   });
 });

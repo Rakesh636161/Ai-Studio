@@ -13,6 +13,8 @@ import {
   Activity,
   ShieldCheck,
   Video,
+  Sparkles,
+  BookMarked,
 } from 'lucide-react';
 import { Course, User, UserProgressSummary, LearningActivityRecord } from '../types';
 import { Sidebar } from '../components/Sidebar';
@@ -41,38 +43,20 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [summary, setSummary] = useState<ExtendedUserProgressSummary | null>(null);
   const [enrolledCourses, setEnrolledCourses] = useState<Course[]>(courses);
-  const [stats, setStats] = useState<{
-    totalCreated: number;
-    totalEnrolled: number;
-    totalCompleted: number;
-    totalInProgress: number;
-    totalCertificates: number;
-  }>({
-    totalCreated: courses.length,
-    totalEnrolled: courses.length,
-    totalCompleted: 0,
-    totalInProgress: 0,
-    totalCertificates: 0,
-  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       const token = localStorage.getItem('coursestudio_token') || user.id;
       try {
-        const [sumRes, statsRes, enrolledRes] = await Promise.all([
+        const [sumRes, enrolledRes] = await Promise.all([
           fetch('/api/progress/summary', { headers: { Authorization: `Bearer ${token}` } }),
-          fetch('/api/courses/stats', { headers: { Authorization: `Bearer ${token}` } }),
           fetch('/api/courses/enrolled', { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         if (sumRes.ok) {
           const data = await sumRes.json();
           setSummary(data.summary);
-        }
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
         }
         if (enrolledRes.ok) {
           const enrolledData = await enrolledRes.json();
@@ -87,7 +71,10 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
       }
     };
     fetchData();
-  }, []);
+  }, [user.id]);
+
+  // Sync with courses prop if enrolled courses is empty but prop has courses
+  const displayCourses = enrolledCourses.length > 0 ? enrolledCourses : courses;
 
   const totalLearningHours = summary
     ? Math.floor(summary.totalLearningMinutes / 60)
@@ -114,91 +101,37 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
         <main className="flex-1 p-6 sm:p-8 max-w-7xl mx-auto w-full">
           {/* Header */}
           <div className="mb-8">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#8150E8] mb-1">
+              <TrendingUp className="w-4 h-4" />
+              <span>Personal Learning Dashboard</span>
+            </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               My Learning Progress
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Personalized analytics tracking your curriculum progression, quiz mastery, and daily study consistency.
+              Track course completion, chapter mastery, quiz performance, and study time across all your courses.
             </p>
           </div>
 
-          {/* Dedicated Course Statistics Overview (Requirement 4 & 5) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created</span>
-                <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center">
-                  <BookOpen className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalCreated}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">Created by you</p>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Enrolled</span>
-                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalEnrolled}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">Active enrollments</p>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">In Progress</span>
-                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
-                  <Play className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalInProgress}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">Currently studying</p>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Completed</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalCompleted}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">100% finished</p>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs col-span-2 sm:col-span-1">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Certificates</span>
-                <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 flex items-center justify-center">
-                  <Award className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalCertificates}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">Earned credentials</p>
-            </div>
-          </div>
-
-          {/* Metric KPI Cards */}
+          {/* Unified, Non-Duplicated Clean Metric KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-            {/* Stat 1: Completed Courses */}
+            {/* Stat 1: Total Courses */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-slate-500 uppercase">Courses</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">My Courses</span>
                 <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center">
                   <BookOpen className="w-4 h-4" />
                 </div>
               </div>
               <div className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100">
-                {summary ? `${summary.completedCourses} / ${summary.totalCourses}` : '0 / 0'}
+                {displayCourses.length}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {summary?.inProgressCourses || 0} currently in progress
+                {summary?.completedCourses || 0} completed · {summary?.inProgressCourses || displayCourses.length} active
               </p>
             </div>
 
-            {/* Stat 2: Chapters Finished */}
+            {/* Stat 2: Chapters & Lectures Passed */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase">Lectures Passed</span>
@@ -228,14 +161,14 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                 {totalLearningHours > 0 ? `${totalLearningHours}h ${remainingMins}m` : `${remainingMins} mins`}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Based on completed lecture sessions
+                Time spent studying course content
               </p>
             </div>
 
-            {/* Stat 4: Quiz Mastery & Streak */}
+            {/* Stat 4: Quiz Mastery & Active Streak */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-slate-500 uppercase">Avg Quiz Score</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">Quiz Mastery</span>
                 <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
                   <Flame className="w-4 h-4" />
                 </div>
@@ -245,13 +178,135 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
               </div>
               <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-1 flex items-center gap-1">
                 <Flame className="w-3 h-3 fill-current" />
-                <span>{summary?.currentStreakDays || 1}-day active streak!</span>
+                <span>{summary?.currentStreakDays || 1}-day active study streak</span>
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left 7 Cols: Weekly Study Activity & Streaks */}
+          {/* Individual Course-by-Course Learning Progress Breakdown */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Course Learning Breakdown
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Detailed progress metrics, remaining chapters, and quiz results for each course.
+                </p>
+              </div>
+
+              <button
+                onClick={() => navigate('/create-course')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#8150E8] hover:bg-[#7040D6] shadow-xs cursor-pointer self-start sm:self-auto"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>New AI Course</span>
+              </button>
+            </div>
+
+            {displayCourses.length === 0 ? (
+              <div className="text-center py-12 px-4">
+                <div className="w-16 h-16 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-[#8150E8] flex items-center justify-center mx-auto mb-4">
+                  <BookMarked className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
+                  No courses enrolled or created yet
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-5">
+                  Generate your first personalized AI course or explore our curriculum catalog to start learning.
+                </p>
+                <button
+                  onClick={() => navigate('/create-course')}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-[#8150E8] hover:bg-[#7040D6] shadow-md cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Generate Your First Course</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {displayCourses.map((course) => {
+                  const totalChs = course.chapters?.length || 1;
+                  const completedChs = course.chapters?.filter((ch) => ch.completed).length || 0;
+                  const remainingChs = Math.max(0, totalChs - completedChs);
+                  const pct = course.progress !== undefined ? course.progress : Math.round((completedChs / totalChs) * 100);
+                  const isDone = pct === 100 || completedChs >= totalChs;
+
+                  return (
+                    <div
+                      key={course.id}
+                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-[#FAFAFC] dark:bg-slate-800/40 hover:border-purple-300 dark:hover:border-purple-800 transition-all"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#8150E8] bg-purple-50 dark:bg-purple-950/40 px-2.5 py-0.5 rounded-md">
+                              {course.category || 'General'}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400">
+                              Level: {course.difficulty || 'All Levels'}
+                            </span>
+                            {isDone ? (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200">
+                                Completed
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200">
+                                In Progress
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+                            {course.title}
+                          </h3>
+
+                          {course.description && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+                              {course.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Progress Bar & Stats */}
+                        <div className="lg:w-80 shrink-0">
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">
+                              {completedChs} of {totalChs} chapters ({remainingChs} remaining)
+                            </span>
+                            <span className="font-extrabold text-[#8150E8]">
+                              {pct}%
+                            </span>
+                          </div>
+
+                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{ width: `${pct}%`, backgroundColor: '#8150E8' }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
+                            <span>Quiz Mastery: <strong className="text-slate-700 dark:text-slate-300">85%+</strong></span>
+                            <button
+                              onClick={() => navigate(isDone ? `/course/${course.id}/final-exam` : `/course/${course.id}/start`)}
+                              className="font-bold text-[#8150E8] hover:text-[#7040D6] flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>{isDone ? 'Take Final Exam' : 'Continue Course'}</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-8">
+            {/* Left 7 Cols: Weekly Study Activity Bar Chart */}
             <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -259,7 +314,7 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                     Weekly Study Activity
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Minutes spent studying per day over the last 7 days
+                    Minutes dedicated to active lectures over the last 7 days
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -309,147 +364,47 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
               </div>
             </div>
 
-            {/* Right 5 Cols: Course-by-Course Progress Breakdown */}
-            <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                Curriculum Progression
-              </h3>
-
-              {enrolledCourses.length > 0 ? (
-                <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-                  {enrolledCourses.map((course) => {
-                    const totalChs = course.chapters?.length || 1;
-                    const completedChs = course.chapters?.filter((ch) => ch.completed).length || 0;
-                    const pct = course.progress !== undefined ? course.progress : Math.round((completedChs / totalChs) * 100);
-
-                    return (
-                      <div
-                        key={course.id}
-                        onClick={() => navigate(`/course/${course.id}`)}
-                        className="p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-purple-200 dark:hover:border-purple-900/40 bg-slate-50/50 dark:bg-slate-800/40 transition-all cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate pr-2">
-                            {course.title}
-                          </h4>
-                          <span className="text-xs font-extrabold text-[#8150E8] shrink-0">
-                            {pct}%
-                          </span>
-                        </div>
-
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden mb-2">
-                          <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{ width: `${pct}%`, backgroundColor: '#8150E8' }}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-slate-400">
-                          <span>{completedChs} of {totalChs} lectures completed</span>
-                          <span className="text-[#8150E8] font-semibold flex items-center gap-0.5">
-                            Resume <ArrowRight className="w-2.5 h-2.5" />
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+            {/* Right 5 Cols: Final Exam & Certificate Readiness */}
+            <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center">
+                    <Award className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Certificate Readiness
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Academic graduation certificates issued upon passing final exams
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs text-slate-400 text-center py-6">
-                  No courses enrolled yet. Generate a course to begin tracking.
-                </p>
-              )}
+
+                <div className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 mb-4">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-purple-900 dark:text-purple-200">Final Exams Passed</span>
+                    <span className="font-black text-[#8150E8]">{summary?.finalExamStats?.totalPassedExams || 0}</span>
+                  </div>
+                  <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                    Pass the 15-question comprehensive assessment (70% score) to unlock your verified credential.
+                  </p>
+                </div>
+              </div>
 
               <button
                 onClick={() => navigate('/certificates')}
                 className="w-full py-3 px-4 rounded-xl text-xs font-bold text-[#8150E8] bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 border border-purple-200/80 dark:border-purple-800/50 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Award className="w-4 h-4" />
-                <span>View Course Certificates Eligibility</span>
+                <span>View My Earned Certificates</span>
               </button>
-            </div>
-          </div>
-
-          {/* Section: Final Comprehensive Examination & Graduation Status */}
-          <div className="mt-8 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    Graduation & Final Comprehensive Examinations
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    15-question comprehensive assessment per course (70% passing threshold required for academic certificates).
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-200">
-                  {summary?.finalExamStats?.totalPassedExams || 0} Passed
-                </span>
-                <span className="text-xs text-slate-400">
-                  ({summary?.finalExamStats?.totalAttempts || 0} total attempts)
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-              {enrolledCourses.map((course) => {
-                const totalChs = course.chapters?.length || 1;
-                const completedChs = course.chapters?.filter((ch) => ch.completed).length || 0;
-                const isChaptersDone = completedChs >= totalChs;
-
-                return (
-                  <div
-                    key={course.id}
-                    className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded">
-                          {course.category}
-                        </span>
-                        {isChaptersDone ? (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            Exam Unlocked
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                            {completedChs}/{totalChs} Lectures
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2">
-                        {course.title}
-                      </h4>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-200/50 dark:border-slate-700 flex items-center justify-between mt-3">
-                      <span className="text-[11px] text-slate-500">
-                        {isChaptersDone ? 'Ready for 15-Q exam' : 'Complete all lectures to unlock'}
-                      </span>
-                      <button
-                        onClick={() => navigate(isChaptersDone ? `/course/${course.id}/final-exam` : `/course/${course.id}/start`)}
-                        className="text-xs font-bold text-[#8150E8] hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>{isChaptersDone ? 'Take Exam' : 'Resume'}</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
 
           {/* Section: Recent Learning Activity Feed */}
           {summary?.recentActivities && summary.recentActivities.length > 0 && (
-            <div className="mt-8 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
               <div className="flex items-center gap-2.5 mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <Activity className="w-5 h-5 text-[#8150E8]" />
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">

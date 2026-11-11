@@ -54,20 +54,34 @@ export const MyCoursesPage: React.FC<MyCoursesPageProps> = ({
     return matchesSearch && matchesCategory && matchesDifficulty;
   });
 
-  const handleDeleteCourse = async (id: string, e: React.MouseEvent) => {
+  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
+
+  const promptDeleteCourse = (course: Course, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this course? This action cannot be undone.')) return;
+    setCourseToDelete(course);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!courseToDelete) return;
+    setIsDeletingCourse(true);
     const token = localStorage.getItem('coursestudio_token') || user.id;
     try {
-      const res = await fetch(`/api/courses/${id}`, {
+      const res = await fetch(`/api/courses/${courseToDelete.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         onRefreshCourses();
+        setCourseToDelete(null);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Failed to delete course');
       }
     } catch (err) {
       console.error('Error deleting course:', err);
+    } finally {
+      setIsDeletingCourse(false);
     }
   };
 
@@ -254,7 +268,7 @@ export const MyCoursesPage: React.FC<MyCoursesPageProps> = ({
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={(e) => handleDeleteCourse(course.id, e)}
+                              onClick={(e) => promptDeleteCourse(course, e)}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
                               title="Delete Course"
                             >
@@ -314,6 +328,41 @@ export const MyCoursesPage: React.FC<MyCoursesPageProps> = ({
           onClose={() => setEditingCourse(null)}
           onSave={handleSaveCourseEdits}
         />
+      )}
+
+      {/* Delete Course Confirmation Dialog */}
+      {courseToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 text-center mb-2">
+              Delete Course?
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed mb-6">
+              Are you sure you want to permanently delete <strong className="text-slate-800 dark:text-slate-200">"{courseToDelete.title}"</strong>? All associated chapter progress, video selections, study notes, and quizzes will be removed. This cannot be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCourseToDelete(null)}
+                disabled={isDeletingCourse}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingCourse}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-bold text-white transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+              >
+                {isDeletingCourse ? 'Deleting...' : 'Yes, Delete Course'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

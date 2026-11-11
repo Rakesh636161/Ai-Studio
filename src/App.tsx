@@ -58,6 +58,23 @@ export default function App() {
   };
 
   useEffect(() => {
+    const token = localStorage.getItem('coursestudio_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (data?.user) {
+            setUser(data.user);
+            localStorage.setItem('coursestudio_user', JSON.stringify(data.user));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
     fetchCourses();
   }, [user?.id]);
 
@@ -264,7 +281,7 @@ export default function App() {
           path="/admin"
           element={
             user ? (
-              user.email?.toLowerCase().trim() === 'hdsagar65@gmail.com' ? (
+              user.isAdmin ? (
                 <AdminDashboardPage
                   user={user}
                   courses={courses}

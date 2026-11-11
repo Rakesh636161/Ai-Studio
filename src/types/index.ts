@@ -160,6 +160,7 @@ export interface User {
   avatarUrl?: string;
   coursesCreated?: number;
   emailVerified?: boolean;
+  isAdmin?: boolean;
 }
 
 export interface PDFImportantConcept {
@@ -281,6 +282,8 @@ export interface UserProgressSummary {
 export interface PlatformAdminStats {
   totalUsers: number;
   totalCourses: number;
+  activeCourses?: number;
+  completedCourses?: number;
   totalChapters: number;
   totalCertificates: number;
   totalPdfDocuments: number;

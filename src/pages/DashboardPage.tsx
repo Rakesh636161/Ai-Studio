@@ -139,20 +139,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  const handleDeleteCourse = async (id: string, e: React.MouseEvent) => {
+  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
+
+  const promptDeleteCourse = (course: Course, e: React.MouseEvent) => {
     e.stopPropagation();
     setActiveMenuId(null);
-    if (window.confirm('Are you sure you want to delete this course?')) {
-      const token = localStorage.getItem('coursestudio_token') || user.id;
-      try {
-        await fetch(`/api/courses/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
+    setCourseToDelete(course);
+  };
+
+  const handleConfirmDeleteCourse = async () => {
+    if (!courseToDelete) return;
+    setIsDeletingCourse(true);
+    const token = localStorage.getItem('coursestudio_token') || user.id;
+    try {
+      const res = await fetch(`/api/courses/${courseToDelete.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
         onRefreshCourses();
-      } catch (err) {
-        console.error(err);
+        fetchStats();
+        setCourseToDelete(null);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Failed to delete course');
       }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDeletingCourse(false);
     }
   };
 
@@ -421,8 +437,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                             <div className="my-1 border-t border-slate-100" />
 
                             <button
-                              onClick={(e) => handleDeleteCourse(course.id, e)}
-                              className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left"
+                              onClick={(e) => promptDeleteCourse(course, e)}
+                              className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>Delete Course</span>
@@ -721,6 +737,41 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             if (onUserUpdated) onUserUpdated(updatedUser);
           }}
         />
+      )}
+
+      {/* Delete Course Confirmation Dialog */}
+      {courseToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 text-center mb-2">
+              Delete Course?
+            </h3>
+            <p className="text-xs text-slate-500 text-center leading-relaxed mb-6">
+              Are you sure you want to permanently delete <strong className="text-slate-800">"{courseToDelete.title}"</strong>? All associated chapter progress, video selections, study notes, and quizzes will be removed. This cannot be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCourseToDelete(null)}
+                disabled={isDeletingCourse}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCourse}
+                disabled={isDeletingCourse}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-bold text-white transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+              >
+                {isDeletingCourse ? 'Deleting...' : 'Yes, Delete Course'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

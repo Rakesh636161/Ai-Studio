@@ -48,9 +48,7 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
     }
   };
 
-  const rawCourseTitle = certificate.courseTitle?.trim() || 'Course';
-  const courseClean = rawCourseTitle.replace(/\s+course$/i, '');
-  const courseDisplayTitle = `${courseClean} Course`;
+  const exactCourseTitle = certificate.courseTitle?.trim() || 'Course';
 
   // Format student name in elegant title case for script font
   const studentDisplayName = certificate.userName
@@ -185,20 +183,19 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
               <div className="w-48 sm:w-80 h-[1.5px] bg-gradient-to-r from-transparent via-[#1D4ED8] to-transparent mx-auto mt-0.5" />
             </div>
 
-            {/* Course Completion Statement with Dynamically Retrieved Course Name */}
+            {/* Course Completion Statement with Exact Dynamic Course Title */}
             <div className="mt-2.5 max-w-2xl mx-auto px-4">
               <p className="text-[12px] sm:text-[14px] text-slate-700 font-sans leading-relaxed">
-                For successfully completing the{' '}
-                <span
-                  className="font-bold text-[#0A192F] underline decoration-[#38BDF8] decoration-2 underline-offset-4"
-                  style={{ fontFamily: "'Playfair Display', serif" }}
-                >
-                  {courseDisplayTitle}
-                </span>
-                .
+                For successfully completing the course
               </p>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 font-sans mt-1">
-                Demonstrating comprehensive mastery of core concepts, rigorous practical chapter assessments, and final examination evaluation.
+              <h3
+                className="text-xl sm:text-2xl lg:text-[28px] font-bold text-[#0A192F] mt-1.5 tracking-tight"
+                style={{ fontFamily: "'Playfair Display', 'Cinzel', serif" }}
+              >
+                {exactCourseTitle}
+              </h3>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-sans mt-1.5">
+                Demonstrating comprehensive mastery of core concepts, rigorous practical chapter assessments, and final examination evaluation. Completed on {certificate.issueDate}.
               </p>
             </div>
           </div>

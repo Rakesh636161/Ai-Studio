@@ -1524,21 +1524,44 @@ export function updateCourseInDB(courseId: string, updates: Partial<Course>): Co
 }
 
 export function deleteCourseFromDB(courseId: string, userId: string): boolean {
-  const initialLen = memoryCache.courses.length;
-  memoryCache.courses = memoryCache.courses.filter(
-    c => !(c.id === courseId && c.userId === userId)
-  );
-  const deleted = memoryCache.courses.length < initialLen;
-  if (deleted) {
-    syncToDisk();
-    if (pgPool) {
-      pgPool.query('DELETE FROM courses WHERE id = $1', [courseId])
-        .catch(() => {
-          pgPool = null;
-        });
-    }
+  const course = memoryCache.courses.find(c => c.id === courseId);
+  if (!course) return false;
+
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const caller = memoryCache.users.find(u => u.id === userId);
+  const isCallerAdmin = Boolean(adminEmail && caller?.email && caller.email.trim().toLowerCase() === adminEmail);
+
+  // Strict ownership check: only owner or verified developer admin can delete
+  if (course.userId !== userId && !isCallerAdmin) {
+    return false;
   }
-  return deleted;
+
+  // 1. Remove from courses list
+  memoryCache.courses = memoryCache.courses.filter(c => c.id !== courseId);
+
+  // 2. Cascade delete all user-owned and associated data for this course
+  memoryCache.enrollments = memoryCache.enrollments.filter(e => e.courseId !== courseId);
+  memoryCache.studentProgress = memoryCache.studentProgress.filter(p => p.courseId !== courseId);
+  memoryCache.finalExamAttempts = memoryCache.finalExamAttempts.filter(a => a.courseId !== courseId);
+  memoryCache.certificates = memoryCache.certificates.filter(c => c.courseId !== courseId);
+  memoryCache.learningActivities = memoryCache.learningActivities.filter(a => a.courseId !== courseId);
+  memoryCache.tutorConversations = memoryCache.tutorConversations.filter(t => t.courseId !== courseId);
+
+  // 3. Decrement owner's coursesCreated count
+  const owner = memoryCache.users.find(u => u.id === course.userId);
+  if (owner) {
+    owner.coursesCreated = Math.max(0, memoryCache.courses.filter(c => c.userId === owner.id).length);
+  }
+
+  syncToDisk();
+
+  if (pgPool) {
+    pgPool.query('DELETE FROM courses WHERE id = $1', [courseId]).catch(() => {
+      pgPool = null;
+    });
+  }
+
+  return true;
 }
 
 // ----------------------------------------------------
@@ -1610,61 +1633,134 @@ export function getAllUsers(): DBUser[] {
   return memoryCache.users;
 }
 
-export function getPlatformStats(): PlatformAdminStats {
+export function getAllCourses(): Course[] {
+  return memoryCache.courses;
+}
+
+export function getAdminTelemetryData() {
   const totalUsers = memoryCache.users.length;
   const totalCourses = memoryCache.courses.length;
   const totalChapters = memoryCache.courses.reduce((acc, c) => acc + (c.chapters?.length || 0), 0);
   const totalCertificates = memoryCache.certificates.length;
   const totalPdfDocuments = memoryCache.pdfDocuments.length;
-  const activeLearners = memoryCache.courses.filter(c => (c.progress || 0) > 0).length;
 
+  // Active vs Completed courses
+  let activeCourses = 0;
+  let completedCourses = 0;
+  memoryCache.courses.forEach(c => {
+    const hasCert = memoryCache.certificates.some(cert => cert.courseId === c.id);
+    const hasPassedExam = memoryCache.finalExamAttempts.some(a => a.courseId === c.id && a.passed);
+    if (hasCert || hasPassedExam || (c.progress && c.progress >= 100)) {
+      completedCourses++;
+    } else {
+      activeCourses++;
+    }
+  });
+
+  // Recent Activity Log
   const recentActivity: PlatformAdminStats['recentActivity'] = [];
 
-  // Recent courses
-  memoryCache.courses.slice(0, 5).forEach(c => {
+  memoryCache.courses.slice(0, 10).forEach(c => {
     recentActivity.push({
       id: `act-course-${c.id}`,
       type: 'course_created',
       title: `Course Created: ${c.title}`,
-      detail: `${c.noOfChapters || c.chapters.length} chapters · Level: ${c.difficulty}`,
+      detail: `By ${c.creatorName || c.userEmail || 'User'} · ${c.chapters?.length || c.noOfChapters} chapters`,
       timestamp: c.createdAt,
     });
   });
 
-  // Recent certificates
-  memoryCache.certificates.slice(0, 5).forEach(cert => {
+  memoryCache.certificates.slice(0, 10).forEach(cert => {
     recentActivity.push({
       id: `act-cert-${cert.id}`,
       type: 'certificate_earned',
       title: `Certificate Issued: ${cert.userName}`,
-      detail: `Earned for completing "${cert.courseTitle}" with ${cert.score}%`,
+      detail: `For completing "${cert.courseTitle}" with ${cert.score}%`,
       timestamp: cert.issueDate,
     });
   });
 
-  // Recent PDFs
-  memoryCache.pdfDocuments.slice(0, 5).forEach(doc => {
+  memoryCache.users.slice(0, 10).forEach(u => {
     recentActivity.push({
-      id: `act-pdf-${doc.id}`,
-      type: 'pdf_uploaded',
-      title: `PDF Processed: ${doc.fileName}`,
-      detail: `${doc.mainTopics?.length || 0} topics extracted · Status: ${doc.processingStatus}`,
-      timestamp: doc.createdAt,
+      id: `act-user-${u.id}`,
+      type: 'user_registered',
+      title: `User Registered: ${u.name}`,
+      detail: `${u.email}`,
+      timestamp: u.createdAt,
     });
   });
 
-  // Sort activity by date descending
   recentActivity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+  // Detailed Users with their courses
+  const usersWithCourses = memoryCache.users.map(u => {
+    const userCourses = memoryCache.courses.filter(c => c.userId === u.id);
+    const userCertificates = memoryCache.certificates.filter(c => c.userId === u.id);
+    const userEnrolled = memoryCache.enrollments.filter(e => e.userId === u.id);
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      createdAt: u.createdAt,
+      avatarUrl: u.avatarUrl,
+      coursesCreated: userCourses.length,
+      createdCourses: userCourses.map(c => ({
+        id: c.id,
+        title: c.title,
+        category: c.category,
+        difficulty: c.difficulty,
+        chaptersCount: c.chapters?.length || c.noOfChapters,
+        progress: c.progress || 0,
+        createdAt: c.createdAt,
+        isCompleted: userCertificates.some(cert => cert.courseId === c.id),
+      })),
+      enrolledCount: userEnrolled.length,
+      certificatesCount: userCertificates.length,
+    };
+  });
+
+  // Detailed Courses with creator identity
+  const allCoursesWithCreator = memoryCache.courses.map(c => {
+    const creator = memoryCache.users.find(u => u.id === c.userId);
+    const isCompleted = memoryCache.certificates.some(cert => cert.courseId === c.id) ||
+      memoryCache.finalExamAttempts.some(a => a.courseId === c.id && a.passed);
+    return {
+      id: c.id,
+      title: c.title,
+      description: c.description,
+      category: c.category,
+      difficulty: c.difficulty,
+      userId: c.userId,
+      creatorName: creator?.name || c.creatorName || 'AlphaWave Creator',
+      creatorEmail: creator?.email || c.userEmail || '',
+      createdAt: c.createdAt,
+      chaptersCount: c.chapters?.length || c.noOfChapters || 0,
+      progress: c.progress || 0,
+      isCompleted,
+    };
+  });
+
   return {
-    totalUsers,
-    totalCourses,
-    totalChapters,
-    totalCertificates,
-    totalPdfDocuments,
-    activeLearners,
-    recentActivity: recentActivity.slice(0, 15),
+    stats: {
+      totalUsers,
+      totalCourses,
+      totalChapters,
+      totalCertificates,
+      totalPdfDocuments,
+      activeLearners: Math.max(1, activeCourses),
+      activeCourses,
+      completedCourses,
+      recentActivity: recentActivity.slice(0, 20),
+    },
+    users: usersWithCourses,
+    courses: allCoursesWithCreator,
+    recentlyRegisteredUsers: usersWithCourses.slice(0, 10),
+    recentlyCreatedCourses: allCoursesWithCreator.slice(0, 10),
   };
+}
+
+export function getPlatformStats(): PlatformAdminStats {
+  return getAdminTelemetryData().stats;
 }
 
 // ---------------------------------------------------------------------------

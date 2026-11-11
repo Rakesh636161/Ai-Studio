@@ -57,6 +57,10 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   // Final Comprehensive Assessment status
   const [examStatus, setExamStatus] = useState<FinalExamStatus | null>(null);
 
+  // Course deletion confirmation states
+  const [showDeleteCourseModal, setShowDeleteCourseModal] = useState(false);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
+
   const fetchExamStatus = async () => {
     if (!id) return;
     try {
@@ -239,9 +243,13 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   const handleSelectAlternativeVideo = async (chapterId: string, video: VideoRecommendation) => {
     setActionLoadingId(`video-${chapterId}`);
     try {
+      const token = localStorage.getItem('coursestudio_token') || user?.id || '';
       const res = await fetch(`/api/courses/${course.id}/chapters/${chapterId}/select-video`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           videoId: video.id || video.videoId,
           videoTitle: video.title,
@@ -260,11 +268,39 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
         setCourse(updatedCourse);
         onRefreshCourses();
         setVideoModalChapter(null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to update video. Please try again.');
       }
     } catch (err) {
       console.error('Error selecting video:', err);
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  const handleConfirmDeleteCourse = async () => {
+    setIsDeletingCourse(true);
+    try {
+      const token = localStorage.getItem('coursestudio_token') || user?.id || '';
+      const res = await fetch(`/api/courses/${course.id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        onRefreshCourses();
+        navigate('/my-courses');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to delete course');
+      }
+    } catch (err) {
+      console.error('Error deleting course:', err);
+    } finally {
+      setIsDeletingCourse(false);
+      setShowDeleteCourseModal(false);
     }
   };
 
@@ -337,6 +373,17 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
                   <Play className="w-4 h-4 fill-white" />
                   <span>Start Learning</span>
                 </button>
+
+                {user && (user.id === course.userId || user.isAdmin) && (
+                  <button
+                    onClick={() => setShowDeleteCourseModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all cursor-pointer"
+                    title="Delete Course"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Course</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -887,6 +934,41 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
         onClose={() => setEditingChapter(null)}
         onSave={handleSaveChapter}
       />
+
+      {/* Delete Course Confirmation Dialog */}
+      {showDeleteCourseModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 text-center mb-2">
+              Delete Course?
+            </h3>
+            <p className="text-xs text-slate-500 text-center leading-relaxed mb-6">
+              Are you sure you want to permanently delete <strong className="text-slate-800">"{course.title}"</strong>? All associated chapter progress, video selections, study notes, and quizzes will be removed. This cannot be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteCourseModal(false)}
+                disabled={isDeletingCourse}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCourse}
+                disabled={isDeletingCourse}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-bold text-white transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+              >
+                {isDeletingCourse ? 'Deleting...' : 'Yes, Delete Course'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
