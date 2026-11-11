@@ -60,9 +60,9 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   const fetchExamStatus = async () => {
     if (!id) return;
     try {
-      const token = localStorage.getItem('coursestudio_token') || user?.id || 'user_default_1';
+      const token = localStorage.getItem('coursestudio_token') || user?.id || '';
       const res = await fetch(`/api/courses/${id}/final-exam`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
         const data = await res.json();
@@ -76,7 +76,10 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   const fetchCourse = async () => {
     if (!id) return;
     try {
-      const res = await fetch(`/api/courses/${id}`);
+      const token = localStorage.getItem('coursestudio_token') || user?.id || '';
+      const res = await fetch(`/api/courses/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         setCourse(data);
@@ -118,7 +121,7 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   };
 
   const handleSaveCourse = async (title: string, description: string) => {
-    const token = localStorage.getItem('coursestudio_token') || 'user_default_1';
+    const token = localStorage.getItem('coursestudio_token') || user?.id || '';
     try {
       const res = await fetch(`/api/courses/${course.id}`, {
         method: 'PUT',
@@ -139,7 +142,7 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
   };
 
   const handleSaveChapter = async (chapterNumber: number, title: string, description: string) => {
-    const token = localStorage.getItem('coursestudio_token') || 'user_default_1';
+    const token = localStorage.getItem('coursestudio_token') || user?.id || '';
     try {
       const res = await fetch(`/api/courses/${course.id}/chapters/${chapterNumber}`, {
         method: 'PUT',

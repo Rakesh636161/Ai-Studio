@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, MoreVertical, Play, Eye, Trash2, Edit3, Sparkles, Code2, HeartPulse, Palette, Briefcase, Cpu, Lock, Camera, FileText, CheckCircle2, ExternalLink, X, Video } from 'lucide-react';
+import { Plus, BookOpen, MoreVertical, Play, Eye, Trash2, Edit3, Sparkles, Code2, HeartPulse, Palette, Briefcase, Cpu, Lock, Camera, FileText, CheckCircle2, ExternalLink, X, Video, Award } from 'lucide-react';
 import { Course, User, PDFDocument } from '../types';
 import { Sidebar } from '../components/Sidebar';
 import { Navbar } from '../components/Navbar';
@@ -28,11 +28,41 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
+  // 5 Distinct database-backed stats
+  const [dashboardStats, setDashboardStats] = useState<{
+    totalCreated: number;
+    totalEnrolled: number;
+    totalCompleted: number;
+    totalInProgress: number;
+    totalCertificates: number;
+  }>({
+    totalCreated: courses.length,
+    totalEnrolled: courses.length,
+    totalCompleted: 0,
+    totalInProgress: courses.length > 0 ? 1 : 0,
+    totalCertificates: 0,
+  });
+
   // Tab: 'courses' | 'pdfs'
   const [activeTab, setActiveTab] = useState<'courses' | 'pdfs'>('courses');
   const [pdfDocuments, setPdfDocuments] = useState<PDFDocument[]>([]);
   const [selectedPdfModal, setSelectedPdfModal] = useState<PDFDocument | null>(null);
   const [isConvertingPdf, setIsConvertingPdf] = useState(false);
+
+  const fetchStats = async () => {
+    const token = localStorage.getItem('coursestudio_token') || user.id;
+    try {
+      const res = await fetch('/api/courses/stats', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardStats(data);
+      }
+    } catch (err) {
+      console.warn('Could not fetch dashboard stats:', err);
+    }
+  };
 
   const fetchPdfDocuments = async () => {
     const token = localStorage.getItem('coursestudio_token') || user.id;
@@ -49,9 +79,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  // Fetch courses and PDFs on mount
+  // Fetch courses, stats, and PDFs on mount
   useEffect(() => {
     onRefreshCourses();
+    fetchStats();
     fetchPdfDocuments();
   }, []);
 

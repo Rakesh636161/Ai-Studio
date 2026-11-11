@@ -259,16 +259,20 @@ export default function App() {
           }
         />
 
-        {/* 10. Admin & Platform Management */}
+        {/* 10. Admin & Platform Management (Exclusively for Authorized Developer) */}
         <Route
           path="/admin"
           element={
             user ? (
-              <AdminDashboardPage
-                user={user}
-                courses={courses}
-                onLogout={handleLogout}
-              />
+              user.email?.toLowerCase().trim() === 'hdsagar65@gmail.com' ? (
+                <AdminDashboardPage
+                  user={user}
+                  courses={courses}
+                  onLogout={handleLogout}
+                />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
             ) : (
               <Navigate to="/auth" replace />
             )

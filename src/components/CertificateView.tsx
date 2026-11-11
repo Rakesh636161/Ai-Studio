@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
-import { Award, ShieldCheck, CheckCircle2, Download, Printer, ExternalLink, Sparkles } from 'lucide-react';
+import { Award, ShieldCheck, Printer, ExternalLink, Sparkles } from 'lucide-react';
 import { Certificate } from '../types';
 
 interface CertificateViewProps {
@@ -25,11 +25,11 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
     QRCode.toDataURL(
       fullVerificationUrl,
       {
-        width: 140,
+        width: 150,
         margin: 1,
         color: {
-          dark: '#1e1b4b', // deep indigo
-          light: '#ffffff',
+          dark: '#0A192F', // Deep Navy Blue
+          light: '#FFFFFF',
         },
       },
       (err, url) => {
@@ -48,145 +48,172 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
     }
   };
 
+  const rawCourseTitle = certificate.courseTitle?.trim() || 'Course';
+  const courseClean = rawCourseTitle.replace(/\s+course$/i, '');
+  const courseDisplayTitle = `${courseClean} Course`;
+
+  // Format student name in elegant title case for script font
+  const studentDisplayName = certificate.userName
+    ? certificate.userName
+        .split(' ')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ')
+    : 'Honored Student';
+
   return (
     <div className="flex flex-col items-center w-full">
       {/* Outer Certificate Frame - Landscape A4 Proportion (1.414 : 1) */}
       <div
         ref={certRef}
         id="printable-certificate"
-        className="w-full max-w-[980px] aspect-[1.414/1] bg-white text-slate-900 rounded-none shadow-2xl relative overflow-hidden select-none border-[12px] border-[#0f172a] p-3 sm:p-5 flex flex-col justify-between print:m-0 print:border-[8px] print:shadow-none print:w-full print:h-screen print:max-w-none"
+        className="w-full max-w-[1000px] aspect-[1.414/1] bg-white text-slate-900 rounded-none shadow-2xl relative overflow-hidden select-none border-[12px] border-[#0A192F] p-4 sm:p-5 flex flex-col justify-between print:m-0 print:border-[8px] print:shadow-none print:w-full print:h-screen print:max-w-none"
         style={{
-          boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.25)',
+          boxShadow: '0 25px 60px -15px rgba(10, 25, 47, 0.35)',
         }}
       >
-        {/* Ornate Inner Double Border with Corner Accents */}
-        <div className="w-full h-full border-2 border-indigo-200/90 relative flex flex-col justify-between p-6 sm:p-10 bg-radial from-slate-50/50 via-white to-purple-50/30 overflow-hidden">
+        {/* Inner Ornate Double Border with Corner Brackets */}
+        <div className="w-full h-full border-2 border-[#1E3A8A]/30 relative flex flex-col justify-between p-5 sm:p-8 bg-white overflow-hidden">
           
-          {/* Subtle Guilloche / Geometric Background Watermark Pattern */}
+          {/* Subtle Security Guilloche Watermark Pattern */}
           <svg
-            className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.035]"
+            className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.03]"
             xmlns="http://www.w3.org/2000/svg"
             width="100%"
             height="100%"
           >
             <defs>
               <pattern id="cert-guilloche" width="60" height="60" patternUnits="userSpaceOnUse">
-                <circle cx="30" cy="30" r="28" fill="none" stroke="#4f46e5" strokeWidth="0.75" />
-                <circle cx="30" cy="30" r="20" fill="none" stroke="#8150e8" strokeWidth="0.5" />
-                <path d="M 0 30 Q 30 0 60 30 Q 30 60 0 30" fill="none" stroke="#6366f1" strokeWidth="0.5" />
-                <path d="M 30 0 Q 60 30 30 60 Q 0 30 30 0" fill="none" stroke="#6366f1" strokeWidth="0.5" />
+                <circle cx="30" cy="30" r="28" fill="none" stroke="#2563EB" strokeWidth="0.8" />
+                <circle cx="30" cy="30" r="20" fill="none" stroke="#38BDF8" strokeWidth="0.6" />
+                <circle cx="30" cy="30" r="12" fill="none" stroke="#0A192F" strokeWidth="0.5" />
+                <path d="M 0 30 Q 30 0 60 30 Q 30 60 0 30" fill="none" stroke="#1E3A8A" strokeWidth="0.5" />
+                <path d="M 30 0 Q 60 30 30 60 Q 0 30 30 0" fill="none" stroke="#1E3A8A" strokeWidth="0.5" />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#cert-guilloche)" />
           </svg>
 
-          {/* Elegant Top-Left & Top-Right Curved Ribbon Elements (Inspired by Reference Design) */}
-          <div className="absolute -top-16 -left-16 w-48 h-48 pointer-events-none opacity-90">
-            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <path d="M0 0 L180 0 C120 40 80 80 40 180 L0 180 Z" fill="#1e1b4b" />
-              <path d="M0 0 L150 0 C100 35 70 70 35 150 L0 150 Z" fill="#4f46e5" />
-              <path d="M0 0 L120 0 C80 30 55 55 25 120 L0 120 Z" fill="#8150e8" />
-              <path d="M0 0 L90 0 C60 25 40 40 20 90 L0 90 Z" fill="#d97706" />
+          {/* Top-Left Elegant Curved Wave Ribbons (Navy, Royal Blue, Light Blue & Amber) */}
+          <div className="absolute -top-14 -left-14 w-60 h-60 pointer-events-none opacity-95">
+            <svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              {/* Deep Navy Layer */}
+              <path d="M0 0 L210 0 C140 45 90 95 45 210 L0 210 Z" fill="#0A192F" />
+              {/* Royal Blue Layer */}
+              <path d="M0 0 L175 0 C115 40 75 80 35 175 L0 175 Z" fill="#1D4ED8" />
+              {/* Light Sky Blue Wave Layer */}
+              <path d="M0 0 L140 0 C90 32 60 62 25 140 L0 140 Z" fill="#38BDF8" />
+              {/* Warm Golden Ribbon Accent */}
+              <path d="M0 0 L105 0 C70 25 45 45 18 105 L0 105 Z" fill="#D97706" />
             </svg>
           </div>
 
-          <div className="absolute -bottom-16 -right-16 w-48 h-48 pointer-events-none opacity-90 rotate-180">
-            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <path d="M0 0 L180 0 C120 40 80 80 40 180 L0 180 Z" fill="#1e1b4b" />
-              <path d="M0 0 L150 0 C100 35 70 70 35 150 L0 150 Z" fill="#4f46e5" />
-              <path d="M0 0 L120 0 C80 30 55 55 25 120 L0 120 Z" fill="#8150e8" />
-              <path d="M0 0 L90 0 C60 25 40 40 20 90 L0 90 Z" fill="#d97706" />
+          {/* Bottom-Right Matching Curved Wave Ribbons */}
+          <div className="absolute -bottom-14 -right-14 w-60 h-60 pointer-events-none opacity-95 rotate-180">
+            <svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <path d="M0 0 L210 0 C140 45 90 95 45 210 L0 210 Z" fill="#0A192F" />
+              <path d="M0 0 L175 0 C115 40 75 80 35 175 L0 175 Z" fill="#1D4ED8" />
+              <path d="M0 0 L140 0 C90 32 60 62 25 140 L0 140 Z" fill="#38BDF8" />
+              <path d="M0 0 L105 0 C70 25 45 45 18 105 L0 105 Z" fill="#D97706" />
             </svg>
           </div>
 
-          {/* Decorative Corner Filigree Stamps */}
-          <div className="absolute top-2 right-2 text-indigo-300 pointer-events-none">
+          {/* Corner Structural Accents */}
+          <div className="absolute top-2 right-2 pointer-events-none">
             <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <path d="M40 0 L40 30 C30 30 20 20 20 0 Z" fill="#4f46e5" opacity="0.4" />
-              <path d="M40 0 L10 0 C10 10 20 20 40 20 Z" fill="#8150e8" opacity="0.3" />
+              <path d="M40 0 L40 28 C28 28 18 18 18 0 Z" fill="#1D4ED8" opacity="0.3" />
+              <path d="M40 0 L10 0 C10 10 20 20 40 20 Z" fill="#38BDF8" opacity="0.4" />
             </svg>
           </div>
-          <div className="absolute bottom-2 left-2 text-indigo-300 pointer-events-none rotate-180">
+          <div className="absolute bottom-2 left-2 pointer-events-none rotate-180">
             <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <path d="M40 0 L40 30 C30 30 20 20 20 0 Z" fill="#4f46e5" opacity="0.4" />
-              <path d="M40 0 L10 0 C10 10 20 20 40 20 Z" fill="#8150e8" opacity="0.3" />
+              <path d="M40 0 L40 28 C28 28 18 18 18 0 Z" fill="#1D4ED8" opacity="0.3" />
+              <path d="M40 0 L10 0 C10 10 20 20 40 20 Z" fill="#38BDF8" opacity="0.4" />
             </svg>
           </div>
 
-          {/* Header Section: Brand, Seal & Title */}
+          {/* 1. Header Section: Brand, Institutional Board & Title */}
           <div className="relative z-10 flex flex-col items-center text-center">
-            {/* Top Brand Tag */}
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#1e1b4b] to-[#8150e8] flex items-center justify-center text-white shadow-xs">
-                <Sparkles className="w-4 h-4 text-amber-300" />
+            {/* Top AlphaWave AI Brand & Logo */}
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-[#0A192F] flex items-center justify-center text-white shadow-xs">
+                <Sparkles className="w-4 h-4 text-[#38BDF8]" />
               </div>
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 font-sans">
-                AlphaWave <span className="text-[#8150E8]">AI</span>
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-[#0A192F] font-sans">
+                AlphaWave <span className="text-[#2563EB]">AI</span>
               </span>
             </div>
             
-            <p className="text-[9px] sm:text-[10px] tracking-[0.28em] font-bold uppercase text-slate-500 mb-3">
-              Official Academic Board of Credentialing & Examination
+            {/* Professional Institutional Heading */}
+            <p className="text-[9px] sm:text-[10px] tracking-[0.28em] font-extrabold uppercase text-[#1E3A8A] mb-1.5">
+              National Artificial Intelligence & Emerging Technologies Certification
             </p>
 
-            {/* Certificate Big Heading */}
-            <div className="relative my-1">
+            {/* Large Elegant Title: CERTIFICATE OF COMPLETION */}
+            <div className="relative my-0.5">
               <h1
-                className="text-2xl sm:text-4xl lg:text-[42px] font-black uppercase tracking-[0.16em] text-[#1e1b4b]"
-                style={{ fontFamily: "'Cinzel', serif" }}
+                className="text-2xl sm:text-4xl lg:text-[38px] font-black uppercase tracking-[0.16em] text-[#0A192F]"
+                style={{ fontFamily: "'Playfair Display', 'Cinzel', serif" }}
               >
-                Certificate of Mastery
+                Certificate of Completion
               </h1>
-              <div className="w-36 sm:w-56 h-1 bg-gradient-to-r from-transparent via-[#8150E8] to-transparent mx-auto mt-2" />
+              <div className="flex items-center justify-center gap-2 mt-1.5">
+                <div className="w-16 sm:w-28 h-0.5 bg-gradient-to-r from-transparent via-[#D97706] to-[#D97706]" />
+                <div className="w-2 h-2 rounded-full bg-[#D97706]" />
+                <div className="w-16 sm:w-28 h-0.5 bg-gradient-to-l from-transparent via-[#D97706] to-[#D97706]" />
+              </div>
             </div>
 
-            <p className="text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase text-slate-500 mt-2 font-sans">
-              This credential is professionally awarded to
+            {/* Exact Subtitle Phrasing Required */}
+            <p className="text-[11px] sm:text-xs font-medium tracking-wider text-slate-500 mt-2 font-sans italic">
+              This certificate is proudly presented to
             </p>
           </div>
 
-          {/* Central Recipient & Course Section */}
+          {/* 2. Central Student Name & Prominent Exact Course Title */}
           <div className="relative z-10 text-center my-auto py-1 sm:py-2">
-            {/* Recipient Name */}
-            <div className="inline-block relative mb-1.5">
+            {/* Student's Actual Registered Name in Elegant Calligraphic Script Font */}
+            <div className="inline-block relative mb-1">
               <h2
-                className="text-3xl sm:text-5xl lg:text-5xl font-black tracking-tight text-[#0f172a] uppercase px-6 py-1"
-                style={{ fontFamily: "'Cinzel', serif" }}
+                className="text-4xl sm:text-6xl lg:text-[58px] text-[#0A192F] font-normal px-6 py-0.5 tracking-normal"
+                style={{
+                  fontFamily: "'Great Vibes', 'Alex Brush', cursive",
+                  textShadow: '0 1px 2px rgba(10, 25, 47, 0.08)',
+                }}
               >
-                {certificate.userName || 'STUDENT'}
+                {studentDisplayName}
               </h2>
-              <div className="w-full h-0.5 bg-gradient-to-r from-indigo-300 via-indigo-600 to-indigo-300 mx-auto mt-1" />
+              <div className="w-48 sm:w-80 h-[1.5px] bg-gradient-to-r from-transparent via-[#1D4ED8] to-transparent mx-auto mt-0.5" />
             </div>
 
-            <p className="text-[10px] sm:text-xs text-slate-600 max-w-2xl mx-auto mt-2 leading-relaxed uppercase tracking-wider font-sans font-semibold">
-              For successfully completing the comprehensive learning requirements, practical assessments, and final examination in:
-            </p>
-
-            {/* Prominent High-Contrast Course Title Banner */}
-            <div className="mt-3 inline-block max-w-full px-6 sm:px-10 py-2 sm:py-2.5 bg-gradient-to-r from-purple-50/80 via-indigo-50/90 to-purple-50/80 border-y-2 border-[#4f46e5] rounded-none shadow-2xs">
-              <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-[0.25em] text-[#8150E8] block mb-0.5">
-                Official Certified Course Curriculum
-              </span>
-              <h3
-                className="text-xl sm:text-3xl lg:text-[32px] font-black uppercase text-[#1e1b4b] tracking-wide"
-                style={{ fontFamily: "'Cinzel', serif" }}
-              >
-                {certificate.courseTitle || 'DATABASE MANAGEMENT SYSTEMS (DBMS)'}
-              </h3>
+            {/* Course Completion Statement with Dynamically Retrieved Course Name */}
+            <div className="mt-2.5 max-w-2xl mx-auto px-4">
+              <p className="text-[12px] sm:text-[14px] text-slate-700 font-sans leading-relaxed">
+                For successfully completing the{' '}
+                <span
+                  className="font-bold text-[#0A192F] underline decoration-[#38BDF8] decoration-2 underline-offset-4"
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                >
+                  {courseDisplayTitle}
+                </span>
+                .
+              </p>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-sans mt-1">
+                Demonstrating comprehensive mastery of core concepts, rigorous practical chapter assessments, and final examination evaluation.
+              </p>
             </div>
           </div>
 
-          {/* Bottom Section: Signatures, Emblem Seal, QR Code & Credentials */}
-          <div className="relative z-10 pt-4 border-t border-slate-200/80">
-            <div className="grid grid-cols-3 items-end gap-4">
+          {/* 3. Bottom Section: Signatures, Golden Rosette Seal, QR Code & Verifiable Credentials */}
+          <div className="relative z-10 pt-3 border-t border-slate-200">
+            <div className="grid grid-cols-3 items-end gap-3 sm:gap-4">
               
               {/* Left Column: Academic Signatures & Issue Date */}
-              <div className="text-left space-y-3">
+              <div className="text-left space-y-2.5">
                 <div>
-                  <div className="font-serif italic text-lg sm:text-xl text-slate-800 tracking-wide select-none">
+                  <div className="font-serif italic text-base sm:text-xl text-[#0A192F] tracking-wide select-none font-bold">
                     Dr. Eric V. Thorne
                   </div>
-                  <div className="w-36 h-px bg-slate-400 mt-0.5" />
+                  <div className="w-32 sm:w-40 h-px bg-slate-400 mt-0.5" />
                   <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">
                     Director of Academic Affairs
                   </p>
@@ -198,57 +225,57 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
                 </div>
               </div>
 
-              {/* Center Column: Golden Academic Rosette Emblem Seal */}
+              {/* Center Column: Golden Academic Rosette Medal with Ribbons */}
               <div className="flex flex-col items-center justify-center">
                 <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center">
-                  {/* Rosette SVG */}
+                  {/* Rosette Medal Outer & Inner Rings */}
                   <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md">
-                    <circle cx="50" cy="50" r="46" fill="#1e1b4b" stroke="#d97706" strokeWidth="2" />
-                    <circle cx="50" cy="50" r="41" fill="none" stroke="#f59e0b" strokeWidth="1" strokeDasharray="3 2" />
-                    <circle cx="50" cy="50" r="36" fill="#4338ca" />
+                    <circle cx="50" cy="50" r="46" fill="#0A192F" stroke="#D97706" strokeWidth="2.5" />
+                    <circle cx="50" cy="50" r="41" fill="none" stroke="#F59E0B" strokeWidth="1" strokeDasharray="3 2" />
+                    <circle cx="50" cy="50" r="35" fill="#1E3A8A" />
                     
                     {/* Laurel Wreath */}
                     <path
                       d="M26 50 C26 36 36 26 50 26 C64 26 74 36 74 50"
                       fill="none"
-                      stroke="#fbbf24"
+                      stroke="#FBBF24"
                       strokeWidth="1.5"
                     />
                     <path
                       d="M28 50 C28 62 38 72 50 72 C62 72 72 62 72 50"
                       fill="none"
-                      stroke="#fbbf24"
+                      stroke="#FBBF24"
                       strokeWidth="1.5"
                     />
                   </svg>
 
                   {/* Ribbon Hanging from Seal */}
                   <div className="absolute -bottom-3 flex gap-1">
-                    <div className="w-3 h-5 bg-[#d97706] rounded-b-xs transform -rotate-12 shadow-xs" />
-                    <div className="w-3 h-5 bg-[#8150e8] rounded-b-xs transform rotate-12 shadow-xs" />
+                    <div className="w-3.5 h-6 bg-[#D97706] rounded-b-xs transform -rotate-12 shadow-sm" />
+                    <div className="w-3.5 h-6 bg-[#2563EB] rounded-b-xs transform rotate-12 shadow-sm" />
                   </div>
 
                   {/* Centered Star & Score */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white pb-1">
                     <Award className="w-6 h-6 sm:w-7 sm:h-7 text-amber-300" />
-                    <span className="text-[8px] font-black uppercase tracking-wider text-amber-200 mt-0.5">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-200 mt-0.5">
                       {certificate.score}%
                     </span>
                   </div>
                 </div>
 
                 <div className="text-center mt-3">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-[#1e1b4b] uppercase block">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-[#0A192F] uppercase block">
                     Verified Academic Credential
                   </span>
-                  <span className="text-[8px] sm:text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-sm border border-emerald-200">
+                  <span className="text-[8px] sm:text-[9px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-sm border border-emerald-300 inline-block mt-0.5">
                     Grade: Distinction ({certificate.score}%)
                   </span>
                 </div>
               </div>
 
               {/* Right Column: Verification QR Code & Certificate ID */}
-              <div className="flex flex-col items-end text-right space-y-2">
+              <div className="flex flex-col items-end text-right space-y-1.5">
                 {qrCodeDataUrl ? (
                   <div className="p-1.5 bg-white border border-slate-300 rounded-lg shadow-2xs">
                     <img
@@ -267,13 +294,13 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
                   <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
                     Certificate ID
                   </span>
-                  <span className="font-mono text-[10px] sm:text-xs font-bold text-[#1e1b4b] bg-slate-50 px-2 py-0.5 rounded border border-slate-200 inline-block">
+                  <span className="font-mono text-[10px] sm:text-xs font-bold text-[#0A192F] bg-slate-100 px-2 py-0.5 rounded border border-slate-300 inline-block">
                     {certificate.certificateId}
                   </span>
                 </div>
 
-                <p className="text-[8px] sm:text-[9px] text-slate-400">
-                  Scan to verify on blockchain-ready cryptographic registry.
+                <p className="text-[8px] sm:text-[9px] text-slate-400 max-w-[150px]">
+                  Scan QR code or visit URL to verify authentic record.
                 </p>
               </div>
 
@@ -284,15 +311,15 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
 
       {/* Action Bar (Only visible on screen, hidden in print mode) */}
       {showActions && (
-        <div className="flex flex-wrap items-center justify-between gap-3 w-full max-w-[980px] mt-6 px-2 print:hidden">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 w-full max-w-[1000px] mt-6 px-2 print:hidden">
+          <div className="flex items-center gap-2 text-xs text-slate-600">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
             <span>Public Verification URL:</span>
             <a
               href={fullVerificationUrl}
               target="_blank"
               rel="noreferrer"
-              className="text-[#8150E8] font-bold hover:underline inline-flex items-center gap-1"
+              className="text-[#2563EB] font-bold hover:underline inline-flex items-center gap-1"
             >
               <span>{certificate.certificateId}</span>
               <ExternalLink className="w-3 h-3" />
@@ -302,10 +329,10 @@ export const CertificateView: React.FC<CertificateViewProps> = ({
           <div className="flex items-center gap-2.5">
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-md hover:opacity-95 active:scale-95 transition-all cursor-pointer"
-              style={{ backgroundColor: '#8150E8' }}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs text-white shadow-md hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+              style={{ backgroundColor: '#0A192F' }}
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-4 h-4 text-amber-300" />
               <span>Print / Save as PDF</span>
             </button>
           </div>

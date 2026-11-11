@@ -67,9 +67,9 @@ export const FinalExamPage: React.FC<FinalExamPageProps> = ({ user, onRefreshCou
     if (!courseId) return;
     setLoading(true);
     try {
-      const token = localStorage.getItem('coursestudio_token') || user?.id || 'user_default_1';
+      const token = localStorage.getItem('coursestudio_token') || user?.id || '';
       const res = await fetch(`/api/courses/${courseId}/final-exam`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       if (res.ok) {
@@ -140,7 +140,7 @@ export const FinalExamPage: React.FC<FinalExamPageProps> = ({ user, onRefreshCou
     setIsSubmitting(true);
 
     try {
-      const token = localStorage.getItem('coursestudio_token') || user?.id || 'user_default_1';
+      const token = localStorage.getItem('coursestudio_token') || user?.id || '';
       const durationUsed = EXAM_DURATION_SECONDS - timeLeft;
 
       const res = await fetch(`/api/courses/${courseId}/final-exam/submit`, {

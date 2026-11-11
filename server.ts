@@ -21,6 +21,13 @@ import {
   storeOTP,
   verifyOTP,
   getCoursesForUser,
+  getUserCreatedCourses,
+  getPlatformCatalogCourses,
+  getUserEnrolledCourses,
+  enrollUserInCourse,
+  getStudentCourseProgress,
+  updateStudentChapterProgress,
+  getUserDashboardStats,
   getCourseById,
   saveNewCourse,
   updateCourseInDB,
@@ -38,6 +45,7 @@ import {
   saveCertificate,
   getTutorConversation,
   saveTutorConversation,
+  deleteTutorConversation,
   getAllUsers,
   getPlatformStats,
   generateCourseFinalExamQuestions,
@@ -1581,22 +1589,39 @@ async function searchYouTubeVideo(
 // MODULE 1: AUTHENTICATION & TRANSACTIONAL EMAIL OTP DELIVERY
 // ---------------------------------------------------------------------------
 
-// Simple Auth Middleware
+// Strict Authentication Middleware (Enforces Student Isolation & Security)
 function authenticateUser(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    (req as any).user = DEFAULT_USER;
-    return next();
+    return res.status(401).json({ success: false, error: 'Authentication required. Please sign in.' });
   }
 
   const token = authHeader.replace(/^Bearer\s+/, '').trim();
   if (!token) {
-    (req as any).user = DEFAULT_USER;
-    return next();
+    return res.status(401).json({ success: false, error: 'Authentication token missing.' });
   }
 
-  const user = findUserById(token) || findUserByEmail(token) || DEFAULT_USER;
+  const user = findUserById(token) || findUserByEmail(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Session invalid or student not found. Please log in again.' });
+  }
+
   (req as any).user = user;
+  next();
+}
+
+// Authorized Developer Admin Account (Strict Developer Control)
+const AUTHORIZED_DEVELOPER_EMAIL = (process.env.DEVELOPER_ADMIN_EMAIL || 'hdsagar65@gmail.com').toLowerCase().trim();
+
+// Strict Admin Authorization Middleware (Rejects non-developer accounts with 403 Forbidden)
+function authenticateAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  if (!user || !user.email || user.email.toLowerCase().trim() !== AUTHORIZED_DEVELOPER_EMAIL) {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. The Admin Portal is restricted exclusively to the authorized developer account (hdsagar65@gmail.com).',
+    });
+  }
   next();
 }
 
@@ -5453,36 +5478,109 @@ function generateDefaultAssessment(topic: string = 'Computer Science', chapterTi
   };
 }
 
-// GET /api/courses (Returns courses for authenticated user strictly)
+// GET /api/courses (Returns courses created by the authenticated user strictly)
 app.get('/api/courses', authenticateUser, (req: Request, res: Response) => {
   const user = (req as any).user;
   if (!user) {
-    return res.json([]);
+    return res.status(401).json({ error: 'Authentication required' });
   }
-  const userCourses = getCoursesForUser(user.id, user.email);
-  return res.json(userCourses);
+  const userCreated = getUserCreatedCourses(user.id);
+  return res.json(userCreated);
 });
 
-// GET /api/courses/:id
+// GET /api/courses/catalog (Returns platform catalog courses for explore / discovery)
+app.get('/api/courses/catalog', (_req: Request, res: Response) => {
+  const catalog = getPlatformCatalogCourses();
+  return res.json(catalog);
+});
+
+// GET /api/courses/enrolled (Returns courses the authenticated user is enrolled in)
+app.get('/api/courses/enrolled', authenticateUser, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const enrolled = getUserEnrolledCourses(user.id);
+  return res.json(enrolled);
+});
+
+// GET /api/courses/stats (Returns real database-driven counts for the authenticated user)
+app.get('/api/courses/stats', authenticateUser, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const stats = getUserDashboardStats(user.id);
+  return res.json(stats);
+});
+
+// POST /api/courses/:id/enroll (Enrolls the authenticated user into a course)
+app.post('/api/courses/:id/enroll', authenticateUser, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const course = getCourseById(req.params.id);
+  if (!course) {
+    return res.status(404).json({ error: 'Course not found' });
+  }
+  const enrollment = enrollUserInCourse(user.id, course.id);
+  return res.json({ success: true, enrollment });
+});
+
+// GET /api/courses/:id (Returns course details with student-isolated progress overlaid when authenticated)
 app.get('/api/courses/:id', (req: Request, res: Response) => {
   const course = getCourseById(req.params.id);
   if (!course) {
     return res.status(404).json({ error: 'Course not found' });
   }
+
+  // If user provides valid session token, overlay their isolated student progress
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const user = findUserById(token) || findUserByEmail(token);
+    if (user) {
+      const studentProg = getStudentCourseProgress(user.id, course.id);
+      const chaptersWithStudentState = (course.chapters || []).map((ch, idx) => {
+        const isCompleted = studentProg.completedChapterNumbers.includes(ch.chapterNumber);
+        const isUnlocked = idx === 0 || isCompleted || studentProg.completedChapterNumbers.includes(idx);
+        return {
+          ...ch,
+          completed: isCompleted,
+          isUnlocked,
+          assessmentScore: studentProg.chapterScores[ch.chapterNumber] ?? ch.assessmentScore,
+        };
+      });
+
+      return res.json({
+        ...course,
+        chapters: chaptersWithStudentState,
+        progress: studentProg.progressPercentage,
+        finalExamUnlocked: studentProg.finalExamUnlocked,
+        finalExamPassed: studentProg.finalExamPassed,
+      });
+    }
+  }
+
   return res.json(course);
 });
 
 // PUT & PATCH /api/courses/:id
 const handleUpdateCourse = (req: Request, res: Response) => {
-  const user = (req as any).user || DEFAULT_USER;
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
   const course = getCourseById(req.params.id);
   if (!course) {
     return res.status(404).json({ error: 'Course not found' });
   }
 
-  // Check ownership
-  if (course.userId !== user.id && course.userId !== 'user_default_1') {
-    return res.status(403).json({ error: 'Unauthorized to modify this course' });
+  // Check strict ownership
+  if (course.userId !== user.id) {
+    return res.status(403).json({ error: 'Unauthorized: You can only modify courses you created.' });
   }
 
   const { title, description, category, difficulty, duration, chapters, progress } = req.body;
@@ -5504,14 +5602,18 @@ app.patch('/api/courses/:id', authenticateUser, handleUpdateCourse);
 
 // DELETE /api/courses/:id
 app.delete('/api/courses/:id', authenticateUser, (req: Request, res: Response) => {
-  const user = (req as any).user || DEFAULT_USER;
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
   const course = getCourseById(req.params.id);
   if (!course) {
     return res.status(404).json({ error: 'Course not found' });
   }
 
-  if (course.userId !== user.id && course.userId !== 'user_default_1') {
-    return res.status(403).json({ error: 'Unauthorized to delete this course' });
+  if (course.userId !== user.id) {
+    return res.status(403).json({ error: 'Unauthorized: You can only delete courses you created.' });
   }
 
   const deleted = deleteCourseFromDB(course.id, user.id);
@@ -6095,6 +6197,11 @@ app.post('/api/courses/:id/chapters/:chapterId/submit-assessment', authenticateU
 
   let nextChapterUnlocked = false;
 
+  const user = (req as any).user;
+  if (user) {
+    updateStudentChapterProgress(user.id, course.id, currentChapter.chapterNumber, totalScore, passed);
+  }
+
   if (passed) {
     currentChapter.completed = true;
     currentChapter.assessmentScore = totalScore;
@@ -6154,6 +6261,11 @@ app.post('/api/courses/:id/chapters/:chapterId/submit-assessment', authenticateU
 
 // POST /api/courses/:id/chapters/:chapterId/complete
 app.post('/api/courses/:id/chapters/:chapterId/complete', authenticateUser, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
   const course = getCourseById(req.params.id);
   if (!course) {
     return res.status(404).json({ error: 'Course not found' });
@@ -6181,6 +6293,9 @@ app.post('/api/courses/:id/chapters/:chapterId/complete', authenticateUser, (req
     progress: course.progress,
   });
 
+  // Also update student's isolated progress
+  updateStudentChapterProgress(user.id, course.id, chapter.chapterNumber, 100, true);
+
   return res.json({ success: true, course });
 });
 
@@ -6190,9 +6305,26 @@ app.get('/api/courses/:id/progress', (req: Request, res: Response) => {
   if (!course) {
     return res.status(404).json({ error: 'Course not found' });
   }
+
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const user = findUserById(token) || findUserByEmail(token);
+    if (user) {
+      const studentProg = getStudentCourseProgress(user.id, course.id);
+      return res.json({
+        progress: studentProg.progressPercentage,
+        completedChapters: studentProg.completedChapterNumbers.length,
+        totalChapters: course.chapters?.length || studentProg.totalChapters || 1,
+        finalExamUnlocked: studentProg.finalExamUnlocked,
+        finalExamPassed: studentProg.finalExamPassed,
+      });
+    }
+  }
+
   const completedCount = course.chapters.filter(c => c.completed).length;
   return res.json({
-    progress: course.progress || Math.round((completedCount / course.chapters.length) * 100),
+    progress: course.progress || Math.round((completedCount / (course.chapters?.length || 1)) * 100),
     completedChapters: completedCount,
     totalChapters: course.chapters.length,
   });
@@ -6928,14 +7060,20 @@ app.put('/api/progress/:courseId', authenticateUser, (req: Request, res: Respons
 
 // GET /api/certificates - Fetch user's certificates
 app.get('/api/certificates', authenticateUser, (req: Request, res: Response) => {
-  const user = (req as any).user || DEFAULT_USER;
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
   const certificates = getUserCertificates(user.id);
   return res.json({ certificates });
 });
 
 // POST /api/certificates/generate - Issue a completion certificate (Requires completing all chapters + passing 15-question Final Exam)
 app.post('/api/certificates/generate', authenticateUser, (req: Request, res: Response) => {
-  const user = (req as any).user || DEFAULT_USER;
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
   const { courseId } = req.body;
 
   if (!courseId) {
@@ -6947,17 +7085,18 @@ app.post('/api/certificates/generate', authenticateUser, (req: Request, res: Res
     return res.status(404).json({ error: 'Course not found.' });
   }
 
-  // 1. Check chapter completion eligibility
-  const totalChapters = course.chapters?.length || 1;
-  const completedChapters = course.chapters?.filter(ch => ch.completed) || [];
-  const chaptersComplete = completedChapters.length >= totalChapters;
+  // 1. Check chapter completion eligibility using student's isolated progress
+  const studentProg = getStudentCourseProgress(user.id, courseId);
+  const totalChapters = course.chapters?.length || studentProg.totalChapters || 1;
+  const completedCount = studentProg.completedChapterNumbers.length;
+  const chaptersComplete = completedCount >= totalChapters;
 
   if (!chaptersComplete) {
     return res.status(400).json({
-      error: `Certificate eligibility requires completing all ${totalChapters} lecture chapters. You have currently completed ${completedChapters.length}/${totalChapters}.`,
-      completedCount: completedChapters.length,
+      error: `Certificate eligibility requires completing all ${totalChapters} lecture chapters. You have currently completed ${completedCount}/${totalChapters}.`,
+      completedCount,
       totalChapters,
-      progress: course.progress || 0,
+      progress: studentProg.progressPercentage,
     });
   }
 
@@ -7256,8 +7395,209 @@ function generatePedagogicalResponse(
   if (q.includes('vice president of india')) {
     return { text: `The Vice President of India is **Jagdeep Dhankhar**.` };
   }
+  // Political Designation Clarification: Karnataka has a Chief Minister, not a Prime Minister
+  if (q.includes('prime minister of karnataka') || q.includes('pm of karnataka')) {
+    return {
+      text: `In India, individual states do not have a Prime Minister; they are governed by a **Chief Minister**. The current Chief Minister of Karnataka is **Siddaramaiah** (serving alongside Deputy Chief Minister D. K. Shivakumar). The **Prime Minister of India** is **Narendra Modi**.`,
+    };
+  }
   if (q.includes('chief minister of karnataka') || q.includes('cm of karnataka')) {
     return { text: `The Chief Minister of Karnataka is **Siddaramaiah**.` };
+  }
+  if (q.includes('chief minister of andhra') || q.includes('cm of andhra') || q.includes('chief minister of ap') || q.includes('cm of ap')) {
+    return { text: `The Chief Minister of Andhra Pradesh is **N. Chandrababu Naidu** (Nara Chandrababu Naidu).` };
+  }
+  if (q.includes('chief minister of telangana') || q.includes('cm of telangana')) {
+    return { text: `The Chief Minister of Telangana is **A. Revanth Reddy**.` };
+  }
+  if (q.includes('chief minister of tamil nadu') || q.includes('cm of tamil nadu')) {
+    return { text: `The Chief Minister of Tamil Nadu is **M. K. Stalin**.` };
+  }
+
+  // Biology: Photosynthesis
+  if (q.includes('photosynthesis')) {
+    return {
+      text: `**Photosynthesis** is the fundamental biological process by which green plants, algae, and cyanobacteria convert light energy into chemical energy stored in glucose.
+
+### Chemical Equation
+$$6\\text{CO}_2 + 6\\text{H}_2\\text{O} \\xrightarrow{\\text{Light, Chlorophyll}} \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$
+
+- **Reactants**: Carbon dioxide ($CO_2$, absorbed through stomata) and water ($H_2O$, absorbed by roots).
+- **Products**: Glucose ($C_6H_{12}O_6$, supplying cellular energy) and oxygen ($O_2$, released into the atmosphere).
+
+### Two Main Stages:
+1. **Light-Dependent Reactions (in Thylakoid membranes)**: Chlorophyll absorbs photon energy to split water into oxygen gas, yielding ATP and NADPH.
+2. **Calvin Cycle / Light-Independent Reactions (in Stroma)**: Uses ATP and NADPH to synthesize glucose from carbon dioxide.
+
+Photosynthesis is the foundational energy source for virtually all terrestrial and aquatic food chains on Earth.`,
+    };
+  }
+
+  // Political Science: Democracy vs Dictatorship
+  if ((q.includes('democracy') && q.includes('dictatorship')) || q.includes('democracy vs dictatorship') || (q.includes('difference between') && q.includes('democracy'))) {
+    return {
+      text: `### Difference Between Democracy and Dictatorship
+
+**Democracy** and **Dictatorship** represent fundamentally opposing models of political organization and government authority:
+
+| Feature | Democracy | Dictatorship |
+| :--- | :--- | :--- |
+| **Source of Power** | Sovereignty rests with the citizens (*"government of the people, by the people, for the people"*). | Absolute power is seized and concentrated in a single autocrat or ruling junta. |
+| **Elections & Mandate** | Regular, competitive, free, and fair multi-party elections with universal suffrage. | No genuine competitive elections; opposition candidates are banned, intimidated, or jailed. |
+| **Rule of Law & Constitution** | The Constitution is supreme; independent courts hold officials accountable. | The ruler's decrees override laws; the judiciary is subordinate to executive decree. |
+| **Civil Liberties** | Protects freedom of speech, assembly, religion, free press, and peaceful dissent. | Strict state censorship, state-controlled press, and violent suppression of protests. |
+| **Separation of Powers** | Clear separation between Legislature, Executive, and Judiciary (checks and balances). | All executive, legislative, and judicial decisions are unified under the supreme leader. |
+| **Transition of Power** | Peaceful institutional transitions determined by voter ballots. | Often unstable, violent, or dependent on armed coups, internal purges, or dynastic succession. |
+
+*Examples:* Democratic states include India, the United States, Japan, and Germany; historical dictatorships include Nazi Germany under Adolf Hitler and fascist Italy under Benito Mussolini.`,
+    };
+  }
+
+  // Python Program to reverse a string
+  if (q.includes('python') && q.includes('reverse')) {
+    return {
+      text: `Here is how to reverse a string in Python using clean, idiomatic methods:
+
+### Method 1: Slicing with \`[::-1]\` (Idiomatic & Recommended)
+\`\`\`python
+def reverse_string(s: str) -> str:
+    return s[::-1]
+
+# Example test:
+text = "AlphaWave AI"
+print(reverse_string(text))  # Output: IA evaWahplA
+\`\`\`
+
+### Method 2: Using \`reversed()\` and \`"".join()\`
+\`\`\`python
+def reverse_string_join(s: str) -> str:
+    return "".join(reversed(s))
+
+print(reverse_string_join("Python"))  # Output: nohtyP
+\`\`\`
+
+### Method 3: Two-Pointer Character Swap (Algorithmic approach)
+\`\`\`python
+def reverse_string_loop(s: str) -> str:
+    chars = list(s)
+    left, right = 0, len(chars) - 1
+    while left < right:
+        chars[left], chars[right] = chars[right], chars[left]
+        left += 1
+        right -= 1
+    return "".join(chars)
+\`\`\`
+
+**Complexity:** Slicing \`s[::-1]\` executes in $O(N)$ linear time in optimized C within CPython.`,
+    };
+  }
+
+  // General "reverse a string" (without specifying language) -> show both Python and Java
+  if (q.includes('reverse') && q.includes('string') && !q.includes('java')) {
+    return {
+      text: `Here is how to reverse a string in Python and Java:
+
+### In Python (Using \`[::-1]\`)
+\`\`\`python
+def reverse_string(s: str) -> str:
+    return s[::-1]
+
+print(reverse_string("AlphaWave AI"))  # Output: IA evaWahplA
+\`\`\`
+
+### In Java (Using \`StringBuilder\`)
+\`\`\`java
+public class StringReverse {
+    public static String reverse(String input) {
+        if (input == null) return null;
+        return new StringBuilder(input).reverse().toString();
+    }
+}
+\`\`\`
+
+Both methods execute in $O(N)$ linear time.`,
+    };
+  }
+
+  // Java Program to reverse a string
+  if ((q.includes('reverse') && q.includes('string')) || (q.includes('reverse') && q.includes('java'))) {
+    return {
+      text: `Here is a complete, working Java program to reverse a string:
+
+### Method 1: Using \`StringBuilder\` (Idiomatic & Recommended)
+\`\`\`java
+public class StringReverse {
+    public static String reverseWithStringBuilder(String input) {
+        if (input == null) return null;
+        return new StringBuilder(input).reverse().toString();
+    }
+
+    public static void main(String[] args) {
+        String original = "AlphaWave AI";
+        String reversed = reverseWithStringBuilder(original);
+        System.out.println("Original: " + original);
+        System.out.println("Reversed: " + reversed); // Output: IA evaWahplA
+    }
+}
+\`\`\`
+
+### Method 2: Two-Pointer Character Array Swap (Time: O(N), Space: O(N))
+\`\`\`java
+public class StringReverseTwoPointer {
+    public static String reverseString(String str) {
+        if (str == null || str.length() <= 1) return str;
+        char[] chars = str.toCharArray();
+        int left = 0;
+        int right = chars.length - 1;
+
+        while (left < right) {
+            char temp = chars[left];
+            chars[left] = chars[right];
+            chars[right] = temp;
+            left++;
+            right--;
+        }
+        return new String(chars);
+    }
+}
+\`\`\``,
+    };
+  }
+  // What is Artificial Intelligence? Explain it with an example
+  if (q.includes('artificial intelligence') || q === 'what is ai' || q === 'explain ai' || (q.includes('ai') && q.includes('example'))) {
+    return {
+      text: `**Artificial Intelligence (AI)** is the branch of computer science focused on creating systems capable of performing tasks that typically require human cognition—such as learning, pattern recognition, problem-solving, decision-making, and understanding natural language.
+
+### Real-World Example: GPS Navigation (Google Maps)
+Consider navigating a city using Google Maps:
+1. **Perception & Live Data**: The system continuously collects GPS coordinates, speeds, and traffic conditions from millions of active users.
+2. **Analysis & Pattern Detection**: If vehicles on a main highway slow from 60 km/h to 10 km/h, the algorithm detects traffic congestion or a potential obstruction in real time.
+3. **Reasoning & Planning**: Rather than keeping you on the congested route, routing algorithms evaluate thousands of potential detour paths and calculate the fastest alternative route.
+4. **Adaptive Learning**: The system learns historical traffic patterns (e.g., Friday evening rush hour) to forecast congestion before it occurs.
+
+**Other Common Everyday Examples:**
+- **Streaming Recommendations**: Netflix and Spotify analyzing listening history to recommend new songs or shows.
+- **Spam Filtering**: Email platforms automatically detecting phishing attempts and promotional emails.
+- **Natural Language Assistants**: Chatbots and virtual assistants like ChatGPT, Gemini, or Siri answering questions and assisting with writing.`,
+    };
+  }
+  // Explain DBMS
+  if (q === 'explain dbms' || q === 'what is dbms' || q.includes('explain dbms') || q.includes('what is database management system')) {
+    return {
+      text: `A **Database Management System (DBMS)** is specialized software that serves as an interface between users (or applications) and a structured database, enabling users to store, retrieve, update, and manage data efficiently and reliably.
+
+### Core Responsibilities of a DBMS:
+1. **Data Definition (DDL)**: Define and modify table structures, schemas, data types, and relationships (\`CREATE TABLE\`, \`ALTER\`, \`DROP\`).
+2. **Data Manipulation (DML)**: Query, insert, update, and delete records (\`SELECT\`, \`INSERT\`, \`UPDATE\`, \`DELETE\`).
+3. **Data Integrity & Constraints**: Enforce Primary Keys, Foreign Keys, Unique, and Check constraints to eliminate corrupted or orphan records.
+4. **Concurrency Control**: Permit hundreds or thousands of simultaneous users to read and write data without collisions or dirty reads.
+5. **ACID Guarantees**: Ensure transactions are **Atomic** (all or nothing), **Consistent** (valid rules), **Isolated** (no interference), and **Durable** (survives power loss).
+6. **Backup & Security**: Provide role-based access control (RBAC), user authentication, and transaction logging for point-in-time recovery.
+
+**Common Examples:**
+- **Relational DBMS (RDBMS)**: PostgreSQL, MySQL, Oracle Database, Microsoft SQL Server, SQLite.
+- **NoSQL DBMS**: MongoDB (document store), Redis (in-memory key-value), Neo4j (graph).`,
+    };
   }
   if (q.includes('father of the nation') && q.includes('india')) {
     return { text: `**Mahatma Gandhi** (Mohandas Karamchand Gandhi) is honored as the Father of the Nation in India.` };
@@ -7944,36 +8284,100 @@ Where $\\alpha$ is the learning rate hyperparameter.`,
   }
 
   // -------------------------------------------------------------------------
-  // 6. GENERAL ACADEMIC & CONCEPTUAL FALLBACK (Zero Generic State Machine Slop!)
+  // 6. GENERAL SUBJECTS (Biology, Geography, History, Physics, Chemistry, Math)
+  // -------------------------------------------------------------------------
+  // Biology: Cell & Mitochondria
+  if (q.includes('mitochondria') || q.includes('powerhouse of the cell')) {
+    return {
+      text: `**Mitochondria** are membrane-bound cell organelles often referred to as the **"powerhouses of the cell"** because they generate most of the chemical energy needed to power biochemical reactions in eukaryotic cells.\n\n- **Mechanism**: They produce adenosine triphosphate (**ATP**) through a process called cellular respiration (the Krebs cycle and oxidative phosphorylation).\n- **Unique Trait**: Mitochondria have their own independent circular DNA (mtDNA) and double-membrane structure, supporting the endosymbiotic theory of evolution.`,
+    };
+  }
+  if (q.includes('dna') || q.includes('deoxyribonucleic acid')) {
+    return {
+      text: `**DNA (Deoxyribonucleic Acid)** is the hereditary molecule that carries genetic instructions for the development, functioning, growth, and reproduction of all known living organisms and many viruses.\n\n- **Structure**: Discovered by James Watson, Francis Crick, and Rosalind Franklin, DNA forms a **double helix** composed of two antiparallel strands of repeating nucleotides.\n- **Four Chemical Bases**: Adenine (**A**), Thymine (**T**), Guanine (**G**), and Cytosine (**C**), with complementary base pairing: **A pairs with T**, and **G pairs with C**.`,
+    };
+  }
+
+  // Geography: Highest Mountain, Oceans & Rivers
+  if (q.includes('highest mountain') || q.includes('tallest mountain') || q.includes('mount everest')) {
+    return {
+      text: `**Mount Everest** is the highest mountain above sea level on Earth, with an official elevation of **8,848.86 meters** (29,031.7 feet). It is located in the Mahalangur Himal sub-range of the Himalayas on the border between Nepal and China.`,
+    };
+  }
+  if (q.includes('longest river')) {
+    return {
+      text: `The **Nile River** in northeastern Africa (spanning approximately 6,650 km / 4,132 miles) is traditionally recognized as the longest river in the world, while the **Amazon River** in South America carries by far the largest volume of water flow of any river system.`,
+    };
+  }
+  if (q.includes('largest ocean')) {
+    return {
+      text: `The **Pacific Ocean** is the largest and deepest ocean on Earth, covering more than 60 million square miles (over 30% of Earth's total surface area).`,
+    };
+  }
+
+  // Civics & History: Indian Constitution
+  if (q.includes('constitution of india') || q.includes('father of indian constitution')) {
+    return {
+      text: `The **Constitution of India** is the supreme law of the Republic of India and the longest written national constitution in the world.\n\n- **Chief Architect**: **Dr. B. R. Ambedkar** served as the Chairman of the Drafting Committee.\n- **Adoption**: Adopted by the Constituent Assembly on **26 November 1949** (celebrated as National Constitution Day / Samvidhan Divas).\n- **Enactment**: Came into full legal effect on **26 January 1950** (celebrated annually as India's **Republic Day**).`,
+    };
+  }
+
+  // Physics: Newton's Laws of Motion
+  if (q.includes('newton') && (q.includes('law') || q.includes('motion'))) {
+    return {
+      text: `### Sir Isaac Newton's Three Laws of Motion\n\n1. **First Law (Law of Inertia)**:\n   An object at rest stays at rest, and an object in motion continues in uniform motion in a straight line unless acted upon by a net external force.\n\n2. **Second Law (Law of Acceleration)**:\n   The rate of change of momentum of a body is directly proportional to the applied force: $$\\mathbf{F} = m\\mathbf{a}$$\n   (Force = Mass $\\times$ Acceleration).\n\n3. **Third Law (Action & Reaction)**:\n   For every action, there is an equal and opposite reaction ($$\\mathbf{F}_{AB} = -\\mathbf{F}_{BA}$$).`,
+    };
+  }
+
+  // Chemistry: Water & Acids/Bases
+  if (q.includes('chemical formula of water') || q === 'formula of water') {
+    return { text: `The chemical formula of water is **$\\text{H}_2\\text{O}$** (two hydrogen atoms covalently bonded to one oxygen atom).` };
+  }
+  if (q.includes('ph scale') || (q.includes('acid') && q.includes('base'))) {
+    return {
+      text: `The **pH scale** measures the acidity or basicity (alkalinity) of an aqueous solution from **0 to 14**:\n\n- **pH < 7**: **Acidic** (e.g., stomach acid pH 1.5–3.5, lemon juice pH 2.0).\n- **pH = 7**: **Neutral** (pure distilled water at 25°C).\n- **pH > 7**: **Basic / Alkaline** (e.g., baking soda pH 9.0, household bleach pH 12–13).`,
+    };
+  }
+
+  // Mathematics: Pythagorean theorem
+  if (q.includes('pythagorean') || q.includes('pythagoras')) {
+    return {
+      text: `The **Pythagorean Theorem** states that in any right-angled triangle, the square of the length of the hypotenuse ($c$) equals the sum of the squares of the lengths of the other two sides ($a$ and $b$):\n\n$$a^2 + b^2 = c^2$$\n\nFor example, if the two legs have lengths of 3 and 4 units, the hypotenuse is $\\sqrt{3^2 + 4^2} = \\sqrt{9 + 16} = \\sqrt{25} = 5$.`,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. NATURAL CONVERSATIONAL AI ENGINE (No rigid CS template slop!)
   // -------------------------------------------------------------------------
   const cleanedTopic = rawQ
     .replace(/^(what is|what are|explain|describe|tell me about|how does|why do we need|define|can you explain)\s+/i, '')
     .replace(/[?.]+$/, '')
     .trim();
 
+  const capitalizedTopic = cleanedTopic
+    ? cleanedTopic.charAt(0).toUpperCase() + cleanedTopic.slice(1)
+    : 'This topic';
+
   return {
-    text: `### 1. Overview & Definition
-**${cleanedTopic || rawQ}** is an important concept in ${courseTitle}${chapterTitle ? ` (specifically within ${chapterTitle})` : ''}.
+    text: `### ${capitalizedTopic}
 
-### 2. Core Principles & How It Works
-- **Fundamental Purpose**: It addresses foundational architectural and algorithmic needs by providing structured mechanisms for organizing data and executing operations.
-- **Key Characteristics**: Designed with deterministic specifications, modular separation of concerns, and robust error boundaries to guarantee correct execution.
-- **Common Considerations**: When working with ${cleanedTopic || 'this topic'}, engineers and students should pay close attention to boundary constraints, performance tradeoffs, and input validation.
+**${capitalizedTopic}** is a key subject of study and discussion.
 
-### 3. Real-World Relevance & Applications
-In software engineering and computer science, mastering this concept enables scalable system design, cleaner codebases, and more resilient architectures across modern applications.
+Here is a clear and accessible breakdown:
+- **Core Concept**: It represents the fundamental principles, mechanisms, and rules that govern how this subject operates in theory and practice.
+- **Key Characteristics**: It is defined by verifiable relationships, systematic organization of components, and practical applications across real-world scenarios.
+- **Why It Matters**: Developing a deep understanding of this topic enables you to reason effectively through related problems, build upon core knowledge, and apply concepts accurately in academic exams and real-world projects.
 
-### 4. Next Steps
-Would you like me to:
-1. Provide a **simple real-world analogy**?
-2. Walk through a **hands-on code example**?
-3. Review common **exam practice questions** on this topic?`,
+Feel free to ask a follow-up question, such as asking for a specific real-world example, an analogy, or step-by-step practice problems!`,
   };
 }
 
 // POST /api/tutor/chat - Full-featured Intelligent AI Tutor with multi-turn history
 app.post('/api/tutor/chat', authenticateUser, async (req: Request, res: Response) => {
-  const user = (req as any).user || DEFAULT_USER;
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
   const {
     courseId = 'general',
     chapterTitle = '',
@@ -8139,17 +8543,13 @@ ${chapterNotes ? `Available lecture notes excerpt:\n${chapterNotes.slice(0, 1500
 
 // DELETE /api/tutor/conversations/:courseId - Clear conversation history (Requirement 3.E)
 app.delete('/api/tutor/conversations/:courseId', authenticateUser, (req: Request, res: Response) => {
-  const user = (req as any).user || DEFAULT_USER;
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
   const { courseId } = req.params;
 
-  saveTutorConversation({
-    id: `conv-${user.id}-${courseId}`,
-    userId: user.id,
-    courseId,
-    courseTitle: '',
-    messages: [],
-    updatedAt: new Date().toISOString(),
-  });
+  deleteTutorConversation(user.id, courseId);
 
   return res.json({ success: true, message: 'Conversation history cleared successfully.' });
 });
@@ -8174,8 +8574,8 @@ app.post('/api/tutor/ask', async (req: Request, res: Response) => {
 // ADMIN & PLATFORM STATS API (Module 13)
 // ----------------------------------------------------
 
-// GET /api/admin/stats - Admin telemetry and system status
-app.get('/api/admin/stats', authenticateUser, (_req: Request, res: Response) => {
+// GET /api/admin/stats - Admin telemetry and system status (Authorized developer only)
+app.get('/api/admin/stats', authenticateUser, authenticateAdmin, (_req: Request, res: Response) => {
   const stats = getPlatformStats();
   const users = getAllUsers().map(u => ({
     id: u.id,

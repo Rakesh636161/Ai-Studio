@@ -5,18 +5,12 @@ import {
   Send,
   Sparkles,
   BookOpen,
-  Code2,
   Copy,
   Check,
-  RotateCcw,
   User as UserIcon,
-  HelpCircle,
-  Lightbulb,
-  Layers,
-  ArrowRight,
   Terminal,
-  Trash2,
-  MessageSquare,
+  RotateCcw,
+  PlusCircle,
 } from 'lucide-react';
 import { Course, User, TutorMessage } from '../types';
 import { Sidebar } from '../components/Sidebar';
@@ -36,7 +30,7 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>(() => courses[0]?.id || 'general');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('general');
   const [selectedChapterTitle, setSelectedChapterTitle] = useState<string>('');
   const [explanationMode, setExplanationMode] = useState<'simple' | 'detailed' | 'practical'>('simple');
   const [questionInput, setQuestionInput] = useState('');
@@ -45,17 +39,18 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const [messages, setMessages] = useState<TutorMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `Hello ${user.name}! I am your AlphaWave AI Personal Tutor. Choose a course and session from the controls above, select your desired explanation mode, and ask me any question or paste code you want to debug.`,
-      explanationMode: 'simple',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const initialGreeting: TutorMessage = {
+    id: 'welcome',
+    role: 'assistant',
+    content: `Hello ${user.name}! I am your **AlphaWave AI Tutor**.\n\nYou can ask me anything naturally — whether it's programming problems (e.g., *Write a program to reverse a string in Java*), concepts like *What is Artificial Intelligence?* or *Explain DBMS*, general knowledge (e.g., *Capital of India* or *Chief Minister of Karnataka*), or doubts from your course lectures.\n\nType your question below to begin!`,
+    explanationMode: 'simple',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+
+  const [messages, setMessages] = useState<TutorMessage[]>([initialGreeting]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
 
@@ -77,6 +72,8 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
           const data = await res.json();
           if (data.conversation?.messages && data.conversation.messages.length > 0) {
             setMessages(data.conversation.messages);
+          } else {
+            setMessages([initialGreeting]);
           }
         }
       } catch (err) {
@@ -86,8 +83,7 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
     fetchHistory();
   }, [selectedCourseId]);
 
-  const handleClearChat = async () => {
-    if (!window.confirm('Clear conversation history for this course?')) return;
+  const handleNewChat = async () => {
     try {
       const token = localStorage.getItem('coursestudio_token') || user.id;
       await fetch(`/api/tutor/conversations/${selectedCourseId}`, {
@@ -96,24 +92,24 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
       });
       setMessages([
         {
-          id: 'welcome',
+          id: `welcome-${Date.now()}`,
           role: 'assistant',
-          content: `Conversation reset. I am your AlphaWave AI Tutor for ${selectedCourse?.title || 'academic subjects'}. Ask me any technical doubt or select a topic below.`,
+          content: `New chat started! What would you like to explore or ask today?`,
           explanationMode,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
+      setQuestionInput('');
+      setCodeInput('');
+      setShowCodeInput(false);
+      textareaRef.current?.focus();
     } catch (e) {
-      console.error('Error clearing chat:', e);
+      console.error('Error starting new chat:', e);
     }
   };
 
-  const handleQuickAsk = (q: string) => {
-    setQuestionInput(q);
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!questionInput.trim() || isLoading) return;
 
     const currentQuestion = questionInput.trim();
@@ -161,7 +157,7 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
       const botMsg: TutorMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        content: data.response,
+        content: data.response || data.reply,
         explanationMode: data.explanationMode || explanationMode,
         codeSnippet: data.codeSnippet,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -174,12 +170,19 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: `I ran into an issue connecting to the AI Tutor service: ${err.message}. Please try asking your question again.`,
+          content: `I encountered an issue processing your query: ${err.message}. Please try again!`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -206,26 +209,26 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
           onOpenProfileModal={() => navigate('/profile')}
         />
 
-        <div className="flex-1 flex flex-col min-h-0 p-4 sm:p-6 max-w-5xl mx-auto w-full">
-          {/* Header & Context Bar */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs mb-4 shrink-0">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center shrink-0">
-                  <Bot className="w-4 h-4" />
-                </div>
-                <div>
-                  <h1 className="text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                    AlphaWave AI Tutor – Doubt Solver
-                  </h1>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Context-aware learning assistant for your courses and lecture materials.
-                  </p>
-                </div>
+        <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-6 max-w-4xl mx-auto w-full">
+          {/* Top Control Bar: Context and New Chat */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xs mb-3 shrink-0 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center shrink-0">
+                <Bot className="w-4 h-4" />
               </div>
+              <div>
+                <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                  AlphaWave AI Tutor
+                </h1>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Natural conversation, doubt solving, coding assistance & general knowledge
+                </p>
+              </div>
+            </div>
 
-              {/* Course Context Picker */}
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              {/* Optional Course Context */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
                 <BookOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <select
                   value={selectedCourseId}
@@ -233,110 +236,42 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
                     setSelectedCourseId(e.target.value);
                     setSelectedChapterTitle('');
                   }}
-                  className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-700 dark:text-slate-200 focus:outline-none"
+                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none"
                 >
-                  <option value="general">General Knowledge</option>
+                  <option value="general">All Topics & General</option>
                   {courses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
                     </option>
                   ))}
                 </select>
-
-                {selectedCourse && selectedCourse.chapters?.length > 0 && (
-                  <select
-                    value={selectedChapterTitle}
-                    onChange={(e) => setSelectedChapterTitle(e.target.value)}
-                    className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-700 dark:text-slate-200 focus:outline-none max-w-44 truncate"
-                  >
-                    <option value="">All Chapters</option>
-                    {selectedCourse.chapters.map((ch) => (
-                      <option key={ch.chapterNumber} value={ch.title}>
-                        Ch {ch.chapterNumber}: {ch.title}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleClearChat}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0"
-                  title="Clear Conversation History"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* 3 Explanation Modes & Clear */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2 overflow-x-auto">
-                <span className="text-[11px] font-bold text-slate-400 uppercase shrink-0">Mode:</span>
-                <button
-                  type="button"
-                  onClick={() => setExplanationMode('simple')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                    explanationMode === 'simple'
-                      ? 'bg-[#8150E8] text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                  }`}
-                >
-                  Simple Explanation
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExplanationMode('detailed')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                    explanationMode === 'detailed'
-                      ? 'bg-[#8150E8] text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                  }`}
-                >
-                  Detailed Explanation
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExplanationMode('practical')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                    explanationMode === 'practical'
-                      ? 'bg-[#8150E8] text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                  }`}
-                >
-                  Practical Example (Code)
-                </button>
               </div>
 
-              <span className="text-[10px] text-slate-400 font-medium">
-                Multi-Turn Memory Active
-              </span>
-            </div>
+              {/* Mode Selector */}
+              <select
+                value={explanationMode}
+                onChange={(e) => setExplanationMode(e.target.value as any)}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none"
+              >
+                <option value="simple">Simple & Intuitive</option>
+                <option value="detailed">In-Depth Academic</option>
+                <option value="practical">Practical Code</option>
+              </select>
 
-            {/* Quick Starter Chips */}
-            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 overflow-x-auto text-[11px]">
-              <span className="text-slate-400 font-bold uppercase shrink-0">Quick Ask:</span>
-              {[
-                'What is 3NF vs BCNF?',
-                'Explain ACID properties with example',
-                'How does TCP 3-way handshake work?',
-                'Difference between Process and Thread',
-                'Write prime generator in Python',
-                'Explain Pinhole Camera Model',
-              ].map((chip, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleQuickAsk(chip)}
-                  className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-950/40 text-slate-600 dark:text-slate-300 transition-colors shrink-0 cursor-pointer"
-                >
-                  {chip}
-                </button>
-              ))}
+              {/* New Chat Button */}
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                title="Start a new chat conversation"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>New Chat</span>
+              </button>
             </div>
           </div>
 
-          {/* Chat Messages Log */}
+          {/* Chat Messages Container */}
           <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 overflow-y-auto space-y-4 shadow-xs">
             {messages.map((msg) => {
               const isUser = msg.role === 'user';
@@ -353,7 +288,7 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
                     {isUser ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                   </div>
 
-                  <div className={`space-y-2 min-w-0 ${isUser ? 'text-right' : ''}`}>
+                  <div className={`space-y-1 min-w-0 max-w-full ${isUser ? 'text-right' : ''}`}>
                     <div
                       className={`inline-block p-4 rounded-2xl text-xs sm:text-sm leading-relaxed text-left ${
                         isUser
@@ -371,7 +306,7 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
                       {msg.codeSnippet && (
                         <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                           <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
-                            <span>Code Block</span>
+                            <span>Code Snippet</span>
                             <button
                               type="button"
                               onClick={() => copyCode(msg.codeSnippet!, msg.id)}
@@ -390,9 +325,6 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
 
                     <div className="text-[10px] text-slate-400 px-1">
                       <span>{msg.timestamp}</span>
-                      {msg.explanationMode && (
-                        <span className="ml-2 font-medium capitalize">· {msg.explanationMode} mode</span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -406,26 +338,26 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-xs text-slate-500 flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-[#8150E8] animate-spin" />
-                  <span>AlphaWave AI Tutor is analyzing your question...</span>
+                  <span>AlphaWave AI Tutor is thinking...</span>
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input & Form */}
+          {/* Clean ChatGPT-Style Input Container */}
           <form onSubmit={handleSendMessage} className="mt-3 shrink-0 space-y-2">
             {showCodeInput && (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-xs">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <Terminal className="w-3.5 h-3.5 text-[#8150E8]" />
-                    <span>Paste Code to Debug or Analyze</span>
+                    <span>Attach Code or Snippet</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowCodeInput(false)}
-                    className="text-slate-400 hover:text-slate-600 text-xs"
+                    className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
                   >
                     Hide
                   </button>
@@ -440,38 +372,38 @@ export const AiTutorPage: React.FC<AiTutorPageProps> = ({
               </div>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-xs focus-within:border-[#8150E8] focus-within:ring-2 focus-within:ring-purple-100 transition-all">
               <button
                 type="button"
                 onClick={() => setShowCodeInput((prev) => !prev)}
-                className={`p-3 rounded-2xl border transition-colors cursor-pointer shrink-0 ${
+                className={`p-2 rounded-xl transition-colors cursor-pointer shrink-0 ${
                   showCodeInput
-                    ? 'bg-purple-50 dark:bg-purple-950/40 border-[#8150E8] text-[#8150E8]'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-800'
+                    ? 'bg-purple-50 dark:bg-purple-950/40 text-[#8150E8]'
+                    : 'text-slate-400 hover:text-slate-600'
                 }`}
                 title="Attach Code"
               >
-                <Code2 className="w-5 h-5" />
+                <Terminal className="w-4 h-4" />
               </button>
 
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={questionInput}
-                  onChange={(e) => setQuestionInput(e.target.value)}
-                  placeholder={`Ask a question about ${selectedCourse?.title || 'this topic'}...`}
-                  disabled={isLoading}
-                  className="w-full pl-4 pr-12 py-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#8150E8] text-slate-900 dark:text-slate-100"
-                />
-                <button
-                  type="submit"
-                  disabled={!questionInput.trim() || isLoading}
-                  className="absolute right-2 top-2 p-2 rounded-xl text-white shadow-xs transition-opacity hover:opacity-95 disabled:opacity-40 cursor-pointer"
-                  style={{ backgroundColor: '#8150E8' }}
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
+              <textarea
+                ref={textareaRef}
+                value={questionInput}
+                onChange={(e) => setQuestionInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything... (e.g. Capital of India, Prime Minister of Karnataka, reverse string in Java, explain DBMS)"
+                rows={1}
+                className="flex-1 text-xs sm:text-sm bg-transparent border-none text-slate-800 dark:text-slate-100 focus:outline-none resize-none py-1.5 px-2"
+              />
+
+              <button
+                type="submit"
+                disabled={!questionInput.trim() || isLoading}
+                className="p-2.5 rounded-xl bg-[#8150E8] text-white hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer shrink-0 flex items-center justify-center"
+                title="Send Message"
+              >
+                <Send className="w-4 h-4" />
+              </button>
             </div>
           </form>
         </div>

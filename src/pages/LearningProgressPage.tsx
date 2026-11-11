@@ -40,26 +40,53 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [summary, setSummary] = useState<ExtendedUserProgressSummary | null>(null);
+  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>(courses);
+  const [stats, setStats] = useState<{
+    totalCreated: number;
+    totalEnrolled: number;
+    totalCompleted: number;
+    totalInProgress: number;
+    totalCertificates: number;
+  }>({
+    totalCreated: courses.length,
+    totalEnrolled: courses.length,
+    totalCompleted: 0,
+    totalInProgress: 0,
+    totalCertificates: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSummary = async () => {
+    const fetchData = async () => {
       const token = localStorage.getItem('coursestudio_token') || user.id;
       try {
-        const res = await fetch('/api/progress/summary', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const [sumRes, statsRes, enrolledRes] = await Promise.all([
+          fetch('/api/progress/summary', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/courses/stats', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/courses/enrolled', { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        if (sumRes.ok) {
+          const data = await sumRes.json();
           setSummary(data.summary);
         }
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
+        }
+        if (enrolledRes.ok) {
+          const enrolledData = await enrolledRes.json();
+          if (Array.isArray(enrolledData)) {
+            setEnrolledCourses(enrolledData);
+          }
+        }
       } catch (err) {
-        console.warn('Failed loading progress summary:', err);
+        console.warn('Failed loading progress data:', err);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchSummary();
+    fetchData();
   }, []);
 
   const totalLearningHours = summary
@@ -93,6 +120,64 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
               Personalized analytics tracking your curriculum progression, quiz mastery, and daily study consistency.
             </p>
+          </div>
+
+          {/* Dedicated Course Statistics Overview (Requirement 4 & 5) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created</span>
+                <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-[#8150E8] flex items-center justify-center">
+                  <BookOpen className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalCreated}</div>
+              <p className="text-[10px] text-slate-400 mt-0.5">Created by you</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Enrolled</span>
+                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalEnrolled}</div>
+              <p className="text-[10px] text-slate-400 mt-0.5">Active enrollments</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">In Progress</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
+                  <Play className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalInProgress}</div>
+              <p className="text-[10px] text-slate-400 mt-0.5">Currently studying</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Completed</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalCompleted}</div>
+              <p className="text-[10px] text-slate-400 mt-0.5">100% finished</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Certificates</span>
+                <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 flex items-center justify-center">
+                  <Award className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">{stats.totalCertificates}</div>
+              <p className="text-[10px] text-slate-400 mt-0.5">Earned credentials</p>
+            </div>
           </div>
 
           {/* Metric KPI Cards */}
@@ -230,9 +315,9 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                 Curriculum Progression
               </h3>
 
-              {courses.length > 0 ? (
+              {enrolledCourses.length > 0 ? (
                 <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-                  {courses.map((course) => {
+                  {enrolledCourses.map((course) => {
                     const totalChs = course.chapters?.length || 1;
                     const completedChs = course.chapters?.filter((ch) => ch.completed).length || 0;
                     const pct = course.progress !== undefined ? course.progress : Math.round((completedChs / totalChs) * 100);
@@ -313,7 +398,7 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-              {courses.map((course) => {
+              {enrolledCourses.map((course) => {
                 const totalChs = course.chapters?.length || 1;
                 const completedChs = course.chapters?.filter((ch) => ch.completed).length || 0;
                 const isChaptersDone = completedChs >= totalChs;

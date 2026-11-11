@@ -63,7 +63,10 @@ export const CourseLearningPage: React.FC = () => {
   // Fetch course from backend
   const fetchCourse = async () => {
     try {
-      const res = await fetch(`/api/courses/${id}`);
+      const token = localStorage.getItem('coursestudio_token') || '';
+      const res = await fetch(`/api/courses/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data: Course = await res.json();
         setCourse(data);
@@ -109,28 +112,34 @@ export const CourseLearningPage: React.FC = () => {
   // Track video watched for accurate learning progress tracking
   useEffect(() => {
     if (course?.id && currentChapter && currentChapter.isUnlocked && currentChapter.videoId) {
-      const token = localStorage.getItem('coursestudio_token') || 'user_default_1';
+      const token = localStorage.getItem('coursestudio_token') || '';
       fetch(`/api/courses/${course.id}/chapters/${currentChapter.chapterNumber}/track-video`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }).catch(() => {});
     }
   }, [course?.id, currentChapter?.chapterNumber, currentChapter?.isUnlocked]);
 
-  const handleSelectVideo = async (video: VideoRecommendation) => {
+  const [customVideoUrl, setCustomVideoUrl] = useState('');
+
+  const handleSelectVideo = async (video: Partial<VideoRecommendation> & { id?: string; videoId?: string; title?: string }) => {
     if (!course || !currentChapter) return;
     setSwitchingVideo(true);
     const chId = currentChapter.id || String(currentChapter.chapterNumber);
+    const token = localStorage.getItem('coursestudio_token') || localStorage.getItem('coursestudio_user');
     try {
       const res = await fetch(`/api/courses/${course.id}/chapters/${chId}/select-video`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           videoId: video.id || video.videoId,
           videoTitle: video.title,
           title: video.title,
-          videoChannel: video.channel || video.channelTitle,
-          channel: video.channel || video.channelTitle,
+          videoChannel: video.channel || (video as any).channelTitle,
+          channel: video.channel || (video as any).channelTitle,
           thumbnailUrl: video.thumbnailUrl,
           relevanceScore: video.relevanceScore,
           score: video.relevanceScore,
@@ -142,12 +151,34 @@ export const CourseLearningPage: React.FC = () => {
         const updatedCourse = data.course || data;
         setCourse(updatedCourse);
         setShowVideoModal(false);
+        setCustomVideoUrl('');
       }
     } catch (err) {
       console.error(err);
     } finally {
       setSwitchingVideo(false);
     }
+  };
+
+  const handleCustomVideoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customVideoUrl.trim()) return;
+    let cleanId = customVideoUrl.trim();
+    if (cleanId.includes('youtube.com/watch?v=')) {
+      cleanId = cleanId.split('v=')[1]?.split('&')[0] || cleanId;
+    } else if (cleanId.includes('youtu.be/')) {
+      cleanId = cleanId.split('youtu.be/')[1]?.split('?')[0] || cleanId;
+    } else if (cleanId.includes('youtube.com/embed/')) {
+      cleanId = cleanId.split('embed/')[1]?.split('?')[0] || cleanId;
+    }
+    handleSelectVideo({
+      id: cleanId,
+      videoId: cleanId,
+      title: `${currentChapter?.title || 'Lecture'} (Custom Video)`,
+      channel: 'Verified YouTube Video',
+      relevanceScore: 98,
+      matchReason: 'Custom video selected for Lecture ' + currentChapter?.chapterNumber,
+    });
   };
 
   const handleCopyNotes = () => {
@@ -317,7 +348,7 @@ export const CourseLearningPage: React.FC = () => {
     setAssessmentResult(null);
 
     try {
-      const token = localStorage.getItem('coursestudio_token') || 'user_default_1';
+      const token = localStorage.getItem('coursestudio_token') || '';
 
       const res = await fetch(`/api/courses/${course.id}/chapters/${currentChapter.chapterNumber}/submit-assessment`, {
         method: 'POST',
@@ -1185,6 +1216,32 @@ export const CourseLearningPage: React.FC = () => {
                     No alternative videos currently cached for this lecture.
                   </p>
                 )}
+                {/* Or Enter Custom Video Link */}
+                <div className="pt-3 border-t border-slate-100 mt-3">
+                  <h4 className="text-xs font-bold text-slate-700 mb-1.5">
+                    Or Enter Any YouTube Video URL / ID
+                  </h4>
+                  <form onSubmit={handleCustomVideoSubmit} className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. https://www.youtube.com/watch?v=... or Video ID"
+                      value={customVideoUrl}
+                      onChange={(e) => setCustomVideoUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#8150E8]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!customVideoUrl.trim() || switchingVideo}
+                      className="px-4 py-2 text-xs font-bold text-white rounded-lg transition-transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+                      style={{ backgroundColor: '#8150E8' }}
+                    >
+                      {switchingVideo ? 'Applying...' : 'Set Video'}
+                    </button>
+                  </form>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Updates only Lecture {currentChapter.chapterNumber} without affecting any other chapters.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

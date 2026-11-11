@@ -426,16 +426,17 @@ export interface StudentCourseProgress {
   courseTitle: string;
   totalChapters: number;
   completedChapterIds: string[];
+  completedChapterNumbers: number[];
   chapterScores: Record<string, number>;
-  videosWatched: string[];
+  videosWatched: (string | number)[];
   progressPercentage: number;
   finalExamUnlocked: boolean;
   finalExamPassed: boolean;
   finalExamBestScore?: number;
-  certificateEarned: boolean;
+  certificateEarned?: boolean;
   certificateId?: string;
   totalStudyMinutes: number;
   lastStudiedAt: string;
-  recentActivities: LearningActivityRecord[];
+  recentActivities?: LearningActivityRecord[];
 }
 

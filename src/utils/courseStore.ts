@@ -1,17 +1,17 @@
 import { Course, CourseChapter, User } from '../types';
 
 export const INITIAL_USER: User = {
-  id: 'user_default_1',
+  id: 'guest_learner',
   name: 'Student Learner',
-  email: 'sagarn6363@gmail.com',
+  email: 'learner@alphawave.edu',
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  coursesCreated: 3,
+  coursesCreated: 0,
 };
 
 export const INITIAL_COURSES: Course[] = [
   {
     id: 'course-sql-101',
-    userId: 'user_default_1',
+    userId: 'platform_instructor',
     title: 'Introduction to SQL for Beginners',
     description: 'This course provides a comprehensive introduction to Structured Query Language (SQL), a standard language used to interact with relational databases. You will learn the essential SQL commands and concepts for querying, manipulating, and managing data.',
     category: 'Programming',
@@ -22,7 +22,7 @@ export const INITIAL_COURSES: Course[] = [
     thumbnailUrl: '/src/assets/images/banner_sql_course_1794057965712.jpg',
     createdAt: '2026-11-01T10:00:00Z',
     creatorName: 'Course Studio AI',
-    userEmail: 'sagarn6363@gmail.com',
+    userEmail: 'instructor@alphawave.edu',
     progress: 20,
     chapters: [
       {

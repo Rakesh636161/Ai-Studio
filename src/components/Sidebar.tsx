@@ -61,6 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsDark(prev => !prev);
   };
 
+  const isDeveloperAdmin = user?.email?.toLowerCase().trim() === 'hdsagar65@gmail.com';
+
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'AI Course Generator', path: '/create-course', icon: Sparkles },
@@ -72,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'Certificates', path: '/certificates', icon: Award },
     { name: 'Profile & Settings', path: '/profile', icon: Settings },
     { name: 'Help & Support', path: '/help', icon: HelpCircle },
-    { name: 'Admin Portal', path: '/admin', icon: ShieldCheck },
+    ...(isDeveloperAdmin ? [{ name: 'Admin Portal', path: '/admin', icon: ShieldCheck }] : []),
   ];
 
   const handleLogout = () => {

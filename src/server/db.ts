@@ -44,9 +44,20 @@ export interface OTPRecord {
   resetToken?: string;
 }
 
+export interface Enrollment {
+  id: string;
+  userId: string;
+  courseId: string;
+  enrolledAt: string;
+  completedAt?: string;
+  status: 'active' | 'completed';
+}
+
 interface DBData {
   users: DBUser[];
   courses: Course[];
+  enrollments: Enrollment[];
+  studentProgress: StudentCourseProgress[];
   otps: OTPRecord[];
   pdfDocuments: PDFDocument[];
   learningProgress: LearningProgress[];
@@ -71,13 +82,13 @@ export const DEFAULT_USER: DBUser = {
   email: 'learner@alphawave.ai',
   passwordHash: 'password123',
   createdAt: new Date().toISOString(),
-  coursesCreated: 3,
+  coursesCreated: 0,
 };
 
 const INITIAL_COURSES: Course[] = [
   {
     id: 'course-sql-101',
-    userId: 'user_default_1',
+    userId: 'platform_instructor',
     title: 'Introduction to SQL for Beginners',
     description: 'Learn SQL and relational databases. Master table design, querying, filtering, multi-table joins, and aggregate business analysis.',
     category: 'Programming',
@@ -598,6 +609,8 @@ const INITIAL_COURSES: Course[] = [
 let memoryCache: DBData = {
   users: [DEFAULT_USER],
   courses: INITIAL_COURSES,
+  enrollments: [],
+  studentProgress: [],
   otps: [],
   pdfDocuments: [],
   learningProgress: [],
@@ -605,7 +618,7 @@ let memoryCache: DBData = {
     {
       id: 'cert_sql_mastery_demo',
       certificateId: 'CERT-AW-1794-DEMO1',
-      userId: 'user_default_1',
+      userId: 'demo_archive_user', // Isolated archive - never leaks to active students
       userName: 'Mhadev Biradar',
       courseId: 'course-sql-101',
       courseTitle: 'Introduction to SQL for Beginners',
@@ -882,6 +895,12 @@ function loadLocalFile(): void {
       }
       if (parsed.finalExamAttempts && Array.isArray(parsed.finalExamAttempts)) {
         memoryCache.finalExamAttempts = parsed.finalExamAttempts;
+      }
+      if (parsed.enrollments && Array.isArray(parsed.enrollments)) {
+        memoryCache.enrollments = parsed.enrollments;
+      }
+      if (parsed.studentProgress && Array.isArray(parsed.studentProgress)) {
+        memoryCache.studentProgress = parsed.studentProgress;
       }
       if (parsed.learningActivities && Array.isArray(parsed.learningActivities)) {
         memoryCache.learningActivities = parsed.learningActivities;
@@ -1189,7 +1208,7 @@ export function savePDFDocument(doc: PDFDocument): PDFDocument {
 
 export function getPDFDocumentsForUser(userId: string): PDFDocument[] {
   if (!userId) return [];
-  return memoryCache.pdfDocuments.filter(p => p.userId === userId || userId === 'user_default_1');
+  return memoryCache.pdfDocuments.filter(p => p.userId === userId);
 }
 
 export function getPDFDocumentById(id: string): PDFDocument | undefined {
@@ -1212,7 +1231,7 @@ export function updatePDFDocument(id: string, updates: Partial<PDFDocument>): PD
 export function deletePDFDocument(id: string, userId: string): boolean {
   const initialLen = memoryCache.pdfDocuments.length;
   memoryCache.pdfDocuments = memoryCache.pdfDocuments.filter(
-    p => !(p.id === id && (p.userId === userId || userId === 'user_default_1'))
+    p => !(p.id === id && p.userId === userId)
   );
   const deleted = memoryCache.pdfDocuments.length < initialLen;
   if (deleted) syncToDisk();
@@ -1240,15 +1259,171 @@ export function saveLearningProgress(progress: LearningProgress): LearningProgre
   return progress;
 }
 
-// Course Methods - Strictly isolate user courses so new accounts don't see other users' private courses
-export function getCoursesForUser(userId: string, userEmail?: string): Course[] {
+// ---------------------------------------------------------------------------
+// Student Course Progress & Enrollment Isolation Engine (Requirements 1, 2, 3)
+// ---------------------------------------------------------------------------
+
+// 1. Created Courses: Filter strictly by course.userId === authenticated userId
+export function getUserCreatedCourses(userId: string): Course[] {
   if (!userId) return [];
-  const normalizedEmail = (userEmail || '').trim().toLowerCase();
-  return memoryCache.courses.filter(c => {
-    if (c.userId === userId) return true;
-    if (normalizedEmail && c.userEmail && c.userEmail.trim().toLowerCase() === normalizedEmail) return true;
-    return false;
+  return memoryCache.courses.filter(c => c.userId === userId);
+}
+
+// 2. Platform Catalog Courses: Available courses on the platform
+export function getPlatformCatalogCourses(): Course[] {
+  return memoryCache.courses;
+}
+
+// 3. Enrolled Courses: Courses the student is actively enrolled in or studying
+export function getUserEnrolledCourses(userId: string): Course[] {
+  if (!userId) return [];
+  const enrolledCourseIds = new Set(
+    memoryCache.enrollments.filter(e => e.userId === userId).map(e => e.courseId)
+  );
+  // User is enrolled in courses they explicitly enrolled in OR courses they created themselves
+  return memoryCache.courses.filter(c => c.userId === userId || enrolledCourseIds.has(c.id));
+}
+
+// 4. Enroll user in a course
+export function enrollUserInCourse(userId: string, courseId: string): Enrollment {
+  const existing = memoryCache.enrollments.find(e => e.userId === userId && e.courseId === courseId);
+  if (existing) return existing;
+  const newEnrollment: Enrollment = {
+    id: `enr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    userId,
+    courseId,
+    enrolledAt: new Date().toISOString(),
+    status: 'active',
+  };
+  memoryCache.enrollments.unshift(newEnrollment);
+  syncToDisk();
+  return newEnrollment;
+}
+
+// 5. Retrieve student's isolated course progress
+export function getStudentCourseProgress(userId: string, courseId: string): StudentCourseProgress {
+  const existing = memoryCache.studentProgress.find(p => p.userId === userId && p.courseId === courseId);
+  const course = getCourseById(courseId);
+  const totalChapters = course?.chapters?.length || course?.noOfChapters || 1;
+
+  if (existing) {
+    existing.totalChapters = totalChapters;
+    if (!existing.completedChapterNumbers) {
+      existing.completedChapterNumbers = [];
+    }
+    return existing;
+  }
+
+  const newProgress: StudentCourseProgress = {
+    userId,
+    courseId,
+    courseTitle: course?.title || 'Course',
+    totalChapters,
+    completedChapterIds: [],
+    completedChapterNumbers: [],
+    chapterScores: {},
+    videosWatched: [],
+    progressPercentage: 0,
+    finalExamUnlocked: false,
+    finalExamPassed: false,
+    totalStudyMinutes: 0,
+    lastStudiedAt: new Date().toISOString(),
+  };
+  memoryCache.studentProgress.push(newProgress);
+  syncToDisk();
+  return newProgress;
+}
+
+// 6. Update student's isolated chapter progress
+export function updateStudentChapterProgress(
+  userId: string,
+  courseId: string,
+  chapterNumber: number,
+  score: number,
+  passed: boolean
+): StudentCourseProgress {
+  const progress = getStudentCourseProgress(userId, courseId);
+  const course = getCourseById(courseId);
+  const totalChapters = course?.chapters?.length || progress.totalChapters || 1;
+
+  if (passed) {
+    if (!progress.completedChapterNumbers.includes(chapterNumber)) {
+      progress.completedChapterNumbers.push(chapterNumber);
+      progress.completedChapterNumbers.sort((a: number, b: number) => a - b);
+    }
+    const chObj = course?.chapters?.find(c => c.chapterNumber === chapterNumber);
+    if (chObj?.id && !progress.completedChapterIds.includes(chObj.id)) {
+      progress.completedChapterIds.push(chObj.id);
+    }
+  }
+
+  progress.chapterScores[chapterNumber] = Math.max(progress.chapterScores[chapterNumber] || 0, score);
+  progress.progressPercentage = Math.round((progress.completedChapterNumbers.length / Math.max(1, totalChapters)) * 100);
+  progress.finalExamUnlocked = progress.completedChapterNumbers.length >= totalChapters;
+  progress.lastStudiedAt = new Date().toISOString();
+  progress.totalStudyMinutes = progress.completedChapterNumbers.length * 25;
+
+  // Check if final exam passed
+  const examPassed = memoryCache.finalExamAttempts.some(
+    a => a.courseId === courseId && a.userId === userId && a.passed
+  );
+  progress.finalExamPassed = examPassed;
+
+  // Check if certificate earned
+  const cert = memoryCache.certificates.find(c => c.courseId === courseId && c.userId === userId);
+  if (cert) {
+    progress.certificateEarned = true;
+    progress.certificateId = cert.certificateId;
+  }
+
+  // Also auto-enroll if not enrolled
+  enrollUserInCourse(userId, courseId);
+
+  syncToDisk();
+  return progress;
+}
+
+// 7. Calculate accurate user dashboard statistics directly from database records
+export function getUserDashboardStats(userId: string): {
+  totalCreated: number;
+  totalEnrolled: number;
+  totalCompleted: number;
+  totalInProgress: number;
+  totalCertificates: number;
+} {
+  if (!userId) {
+    return { totalCreated: 0, totalEnrolled: 0, totalCompleted: 0, totalInProgress: 0, totalCertificates: 0 };
+  }
+  const created = getUserCreatedCourses(userId);
+  const enrolled = getUserEnrolledCourses(userId);
+  const userCerts = getUserCertificates(userId);
+
+  let completed = 0;
+  let inProgress = 0;
+
+  enrolled.forEach(c => {
+    const prog = getStudentCourseProgress(userId, c.id);
+    const isCompleted = (prog.completedChapterNumbers.length >= prog.totalChapters && prog.finalExamPassed) ||
+      userCerts.some(cert => cert.courseId === c.id);
+    if (isCompleted) {
+      completed++;
+    } else if (prog.completedChapterNumbers.length > 0) {
+      inProgress++;
+    }
   });
+
+  return {
+    totalCreated: created.length,
+    totalEnrolled: enrolled.length,
+    totalCompleted: completed,
+    totalInProgress: inProgress,
+    totalCertificates: userCerts.length,
+  };
+}
+
+// Backward-compatible alias for existing callers: strictly queries user's created courses
+export function getCoursesForUser(userId: string, _userEmail?: string): Course[] {
+  return getUserCreatedCourses(userId);
 }
 
 export function getCourseById(courseId: string): Course | undefined {
@@ -1257,6 +1432,9 @@ export function getCourseById(courseId: string): Course | undefined {
 
 export function saveNewCourse(course: Course): Course {
   memoryCache.courses.unshift(course);
+
+  // Automatically enroll creator in the course they created
+  enrollUserInCourse(course.userId, course.id);
 
   const user = memoryCache.users.find(u => u.id === course.userId);
   if (user) {
@@ -1348,7 +1526,7 @@ export function updateCourseInDB(courseId: string, updates: Partial<Course>): Co
 export function deleteCourseFromDB(courseId: string, userId: string): boolean {
   const initialLen = memoryCache.courses.length;
   memoryCache.courses = memoryCache.courses.filter(
-    c => !(c.id === courseId && (c.userId === userId || userId === 'user_default_1'))
+    c => !(c.id === courseId && c.userId === userId)
   );
   const deleted = memoryCache.courses.length < initialLen;
   if (deleted) {
@@ -1365,14 +1543,18 @@ export function deleteCourseFromDB(courseId: string, userId: string): boolean {
 
 // ----------------------------------------------------
 // Certificates Data Access (Module 10)
+// STRICT ISOLATION: A student sees only their own private certificates
 // ----------------------------------------------------
 export function getUserCertificates(userId: string): Certificate[] {
-  return memoryCache.certificates.filter(c => c.userId === userId || userId === 'user_default_1');
+  if (!userId) return [];
+  return memoryCache.certificates.filter(c => c.userId === userId);
 }
 
 export function getCertificateById(certId: string): Certificate | undefined {
+  if (!certId) return undefined;
+  const clean = certId.trim().toLowerCase();
   return memoryCache.certificates.find(
-    c => c.id === certId || c.certificateId.toLowerCase() === certId.toLowerCase()
+    c => c.id.toLowerCase() === clean || c.certificateId.toLowerCase() === clean
   );
 }
 
@@ -1389,16 +1571,18 @@ export function saveCertificate(cert: Certificate): Certificate {
 
 // ----------------------------------------------------
 // AI Tutor Conversations Data Access (Module 8)
+// STRICT ISOLATION: A student sees only their own conversations
 // ----------------------------------------------------
 export function getTutorConversation(userId: string, courseId: string): TutorConversation | undefined {
+  if (!userId) return undefined;
   return memoryCache.tutorConversations.find(
-    c => (c.userId === userId || userId === 'user_default_1') && c.courseId === courseId
+    c => c.userId === userId && c.courseId === courseId
   );
 }
 
 export function saveTutorConversation(conv: TutorConversation): TutorConversation {
   const existingIdx = memoryCache.tutorConversations.findIndex(
-    c => (c.userId === conv.userId || conv.userId === 'user_default_1') && c.courseId === conv.courseId
+    c => c.userId === conv.userId && c.courseId === conv.courseId
   );
   if (existingIdx !== -1) {
     memoryCache.tutorConversations[existingIdx] = conv;
@@ -1407,6 +1591,16 @@ export function saveTutorConversation(conv: TutorConversation): TutorConversatio
   }
   syncToDisk();
   return conv;
+}
+
+export function deleteTutorConversation(userId: string, courseId: string): boolean {
+  const prevLen = memoryCache.tutorConversations.length;
+  memoryCache.tutorConversations = memoryCache.tutorConversations.filter(
+    c => !(c.userId === userId && c.courseId === courseId)
+  );
+  const changed = memoryCache.tutorConversations.length < prevLen;
+  if (changed) syncToDisk();
+  return changed;
 }
 
 // ----------------------------------------------------
@@ -1656,8 +1850,9 @@ export function getCourseFinalExamStatus(userId: string, courseId: string): Fina
     a => a.courseId === courseId && a.userId === userId
   );
 
-  const totalChapters = course?.chapters?.length || 1;
-  const completedChaptersCount = course?.chapters?.filter(c => c.completed).length || 0;
+  const studentProg = getStudentCourseProgress(userId, courseId);
+  const totalChapters = course?.chapters?.length || studentProg.totalChapters || 1;
+  const completedChaptersCount = studentProg.completedChapterNumbers.length;
   const isUnlocked = completedChaptersCount >= totalChapters;
 
   const passedAttempt = userAttempts.find(a => a.passed);
@@ -1666,7 +1861,7 @@ export function getCourseFinalExamStatus(userId: string, courseId: string): Fina
 
   let lockReason: string | undefined = undefined;
   if (!isUnlocked) {
-    const remaining = totalChapters - completedChaptersCount;
+    const remaining = Math.max(0, totalChapters - completedChaptersCount);
     lockReason = `You must complete all ${totalChapters} lecture chapters and chapter-wise assessments first (${remaining} remaining).`;
   }
 
@@ -1698,8 +1893,9 @@ export function submitCourseFinalExam(
   }
 
   const user = findUserById(userId) || DEFAULT_USER;
-  const totalChapters = course.chapters?.length || 1;
-  const completedChaptersCount = course.chapters?.filter(c => c.completed).length || 0;
+  const studentProg = getStudentCourseProgress(userId, courseId);
+  const totalChapters = course.chapters?.length || studentProg.totalChapters || 1;
+  const completedChaptersCount = studentProg.completedChapterNumbers.length;
 
   if (completedChaptersCount < totalChapters) {
     throw new Error(`Final Examination is locked. You must complete all ${totalChapters} chapters before taking the final exam.`);
@@ -1798,8 +1994,12 @@ export function submitCourseFinalExam(
 
   memoryCache.finalExamAttempts.push(newAttempt);
 
-  // Record Learning Activity
+  // Record Learning Activity and Update Isolated Student Progress
   if (passed) {
+    studentProg.finalExamPassed = true;
+    studentProg.finalExamBestScore = Math.max(studentProg.finalExamBestScore || 0, scorePercentage);
+    studentProg.progressPercentage = 100;
+
     recordLearningActivity({
       userId,
       courseId,
@@ -1809,10 +2009,6 @@ export function submitCourseFinalExam(
       detail: `Achieved ${scorePercentage}% score (Passing: 70%). Course successfully completed and Certificate unlocked!`,
       score: scorePercentage,
     });
-
-    // Update course completion status
-    course.progress = 100;
-    syncToDisk();
   } else {
     recordLearningActivity({
       userId,
@@ -1839,52 +2035,42 @@ export function updateChapterAssessment(
   userId: string,
   score: number,
   passed: boolean
-): { course: Course; isComplete: boolean } {
+): { course: Course; isComplete: boolean; studentProgress: StudentCourseProgress } {
   const course = getCourseById(courseId);
   if (!course) {
     throw new Error('Course not found.');
   }
 
-  const chapterIndex = course.chapters.findIndex(c => c.chapterNumber === chapterNumber);
-  if (chapterIndex === -1) {
-    throw new Error('Chapter not found.');
-  }
-
-  const chapter = course.chapters[chapterIndex];
-  chapter.assessmentScore = score;
+  // Update student's isolated progress
+  const updatedProgress = updateStudentChapterProgress(userId, courseId, chapterNumber, score, passed);
 
   if (passed) {
-    chapter.completed = true;
-
-    // Unlock next chapter if exists
-    if (chapterIndex + 1 < course.chapters.length) {
-      course.chapters[chapterIndex + 1].isUnlocked = true;
-    }
-
     recordLearningActivity({
       userId,
       courseId,
       courseTitle: course.title,
       type: 'quiz_passed',
       title: `Passed Quiz: Chapter ${chapterNumber}`,
-      detail: `Scored ${score}% on "${chapter.title}" assessment`,
+      detail: `Scored ${score}% on Chapter ${chapterNumber} assessment`,
       score,
     });
   }
 
-  const completedCount = course.chapters.filter(c => c.completed).length;
-  course.progress = Math.round((completedCount / course.chapters.length) * 100);
+  const isComplete = updatedProgress.completedChapterNumbers.length >= (course.chapters?.length || 1);
 
-  syncToDisk();
-  return { course, isComplete: completedCount >= course.chapters.length };
+  return {
+    course,
+    isComplete,
+    studentProgress: updatedProgress,
+  };
 }
 
 export function getAccurateUserProgressSummary(userId: string): UserProgressSummary & {
   recentActivities: LearningActivityRecord[];
   finalExamStats: { totalPassedExams: number; totalAttempts: number };
 } {
-  const userCourses = getCoursesForUser(userId);
-  const totalCourses = userCourses.length;
+  const enrolledCourses = getUserEnrolledCourses(userId);
+  const totalCourses = enrolledCourses.length;
 
   let completedCourses = 0;
   let inProgressCourses = 0;
@@ -1894,33 +2080,26 @@ export function getAccurateUserProgressSummary(userId: string): UserProgressSumm
   let totalScoreCount = 0;
   let totalMinutes = 0;
 
-  userCourses.forEach(c => {
-    const chs = c.chapters || [];
-    totalChapters += chs.length;
-    const completedChs = chs.filter(ch => ch.completed).length;
+  enrolledCourses.forEach(c => {
+    const prog = getStudentCourseProgress(userId, c.id);
+    const chsCount = c.chapters?.length || prog.totalChapters || 1;
+    totalChapters += chsCount;
+    const completedChs = prog.completedChapterNumbers.length;
     completedChapters += completedChs;
 
-    // Check if final exam passed for this course
-    const examPassed = memoryCache.finalExamAttempts.some(
-      a => a.courseId === c.id && a.userId === userId && a.passed
-    );
-
-    if (completedChs >= chs.length && examPassed) {
+    if (completedChs >= chsCount && prog.finalExamPassed) {
       completedCourses++;
     } else if (completedChs > 0) {
       inProgressCourses++;
     }
 
-    chs.forEach(ch => {
-      // Calculate realistic study time: 25 mins per completed chapter
-      if (ch.completed) {
-        totalMinutes += 25;
-      }
-      if (ch.assessmentScore) {
-        totalScoreSum += ch.assessmentScore;
-        totalScoreCount++;
-      }
+    // Accumulate scores from student's actual chapter assessment scores
+    Object.values(prog.chapterScores).forEach(sc => {
+      totalScoreSum += sc;
+      totalScoreCount++;
     });
+
+    totalMinutes += prog.totalStudyMinutes || (completedChs * 25);
   });
 
   // Include final exam scores in score average
@@ -1968,7 +2147,7 @@ export function getAccurateUserProgressSummary(userId: string): UserProgressSumm
       streakDays++;
       checkDate.setDate(checkDate.getDate() - 1);
     }
-    if (streakDays === 0) streakDays = 1; // at least 1 day active today
+    if (streakDays === 0) streakDays = 1;
   } else {
     streakDays = 0;
   }

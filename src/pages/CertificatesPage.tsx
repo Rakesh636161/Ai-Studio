@@ -32,6 +32,7 @@ export const CertificatesPage: React.FC<CertificatesPageProps> = ({
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>(courses);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [selectedCertModal, setSelectedCertModal] = useState<Certificate | null>(null);
@@ -54,8 +55,26 @@ export const CertificatesPage: React.FC<CertificatesPageProps> = ({
     }
   };
 
+  const fetchEnrolledCourses = async () => {
+    const token = localStorage.getItem('coursestudio_token') || user.id;
+    try {
+      const res = await fetch('/api/courses/enrolled', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setEnrolledCourses(data);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch enrolled courses:', e);
+    }
+  };
+
   useEffect(() => {
     fetchCertificates();
+    fetchEnrolledCourses();
   }, []);
 
   const handleClaimCertificate = async (courseId: string) => {
@@ -216,7 +235,7 @@ export const CertificatesPage: React.FC<CertificatesPageProps> = ({
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {courses.map((course) => {
+              {enrolledCourses.map((course) => {
                 const totalChs = course.chapters?.length || 1;
                 const completedChs = course.chapters?.filter((c) => c.completed).length || 0;
                 const isComplete = completedChs >= totalChs || (course.progress || 0) >= 100;
