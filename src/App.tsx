@@ -29,7 +29,15 @@ export default function App() {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const stored = localStorage.getItem('coursestudio_user');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.email && parsed.email.trim().toLowerCase() === 'rakiraki2529@gmail.com') {
+          parsed.isAdmin = true;
+        } else if (parsed) {
+          parsed.isAdmin = false;
+        }
+        return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -282,7 +290,7 @@ export default function App() {
           path="/admin"
           element={
             user ? (
-              user.isAdmin ? (
+              (user.email && user.email.trim().toLowerCase() === 'rakiraki2529@gmail.com') ? (
                 <AdminDashboardPage
                   user={user}
                   courses={courses}

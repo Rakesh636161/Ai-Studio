@@ -103,8 +103,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   };
 
   useEffect(() => {
-    // If user is not admin, redirect immediately
-    if (!user.isAdmin) {
+    const isAuthorized = Boolean(
+      user.email && user.email.trim().toLowerCase() === 'rakiraki2529@gmail.com'
+    );
+    if (!isAuthorized) {
       navigate('/dashboard', { replace: true });
       return;
     }
@@ -185,7 +187,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Admin Auth Authorization</p>
                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5 truncate">
-                  ADMIN_EMAIL Verified
+                  {user.email} (Verified Admin)
                 </p>
               </div>
               <div className="w-3 h-3 rounded-full bg-emerald-500" />

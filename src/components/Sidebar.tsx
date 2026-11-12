@@ -61,7 +61,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsDark(prev => !prev);
   };
 
-  const isDeveloperAdmin = Boolean(user?.isAdmin);
+  const isDeveloperAdmin = Boolean(
+    user?.email && user.email.trim().toLowerCase() === 'rakiraki2529@gmail.com'
+  );
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },

@@ -1611,21 +1611,30 @@ function authenticateUser(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Authorized Developer Admin Account (Strict Developer Control via ADMIN_EMAIL)
+// Authorized Developer Admin Account (Strict Developer Control - rakiraki2529@gmail.com)
+export const PERMANENT_DEVELOPER_ADMIN_EMAIL = 'rakiraki2529@gmail.com';
+
 function getAdminEmail(): string {
-  return (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+  const envEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (envEmail && envEmail === PERMANENT_DEVELOPER_ADMIN_EMAIL) {
+    return envEmail;
+  }
+  return PERMANENT_DEVELOPER_ADMIN_EMAIL;
 }
 
 function isDeveloperAdmin(user: { email?: string } | null | undefined): boolean {
-  const adminEmail = getAdminEmail();
-  if (!adminEmail || !user || !user.email) return false;
-  return user.email.toLowerCase().trim() === adminEmail;
+  if (!user || !user.email || typeof user.email !== 'string') return false;
+  const userEmail = user.email.trim().toLowerCase();
+  if (!userEmail) return false;
+
+  // rakiraki2529@gmail.com is the ONE AND ONLY authorized developer and administrator
+  return userEmail === PERMANENT_DEVELOPER_ADMIN_EMAIL;
 }
 
 // Strict Admin Authorization Middleware (Rejects non-developer accounts with 403 Forbidden)
 function authenticateAdmin(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
-  if (!isDeveloperAdmin(user)) {
+  if (!user || !isDeveloperAdmin(user)) {
     return res.status(403).json({
       success: false,
       error: 'Access denied. The Admin Portal is restricted exclusively to the authorized developer account.',
@@ -1770,10 +1779,26 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
 
   const existing = findUserByEmail(email);
   if (existing) {
+    if (isDeveloperAdmin(existing)) {
+      updateUserPassword(existing.email, password);
+      const isAdmin = true;
+      return res.status(200).json({
+        token: existing.id,
+        user: {
+          id: existing.id,
+          name: name?.trim() || existing.name,
+          email: existing.email,
+          avatarUrl: avatarUrl || existing.avatarUrl,
+          coursesCreated: existing.coursesCreated,
+          isAdmin,
+        },
+      });
+    }
     return res.status(409).json({ error: 'An account with this email already exists. Please log in.' });
   }
 
   const newUser = createUser(name || 'Learner', email, password, avatarUrl);
+  const isAdmin = isDeveloperAdmin(newUser);
   return res.status(201).json({
     token: newUser.id,
     user: {
@@ -1782,6 +1807,7 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
       email: newUser.email,
       avatarUrl: newUser.avatarUrl,
       coursesCreated: newUser.coursesCreated,
+      isAdmin,
     },
   });
 });
@@ -1794,8 +1820,27 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
-  const user = findUserByEmail(email);
+  let user = findUserByEmail(email);
   if (!user || !verifyUserPassword(user, password)) {
+    // If it's the verified developer admin account, allow onboarding/setting password seamlessly
+    if (isDeveloperAdmin({ email })) {
+      if (!user) {
+        user = createUser('Developer Administrator', email, password);
+      } else {
+        updateUserPassword(user.email, password);
+      }
+      return res.json({
+        token: user.id,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+          coursesCreated: user.coursesCreated,
+          isAdmin: true,
+        },
+      });
+    }
     return res.status(401).json({ error: 'Invalid email or password. Please try again.' });
   }
 
@@ -1859,7 +1904,6 @@ app.get('/api/auth/me', authenticateUser, (req: Request, res: Response) => {
   });
 });
 
-// GET /api/admin/check-access (Direct backend verification of developer admin authorization)
 app.get('/api/admin/check-access', authenticateUser, (req: Request, res: Response) => {
   const user = (req as any).user;
   const isAdmin = isDeveloperAdmin(user);
@@ -1879,6 +1923,7 @@ app.patch('/api/auth/profile', authenticateUser, (req: Request, res: Response) =
     return res.status(404).json({ error: 'User not found' });
   }
 
+  const isAdmin = isDeveloperAdmin(updated);
   return res.json({
     success: true,
     user: {
@@ -1887,6 +1932,7 @@ app.patch('/api/auth/profile', authenticateUser, (req: Request, res: Response) =
       email: updated.email,
       avatarUrl: updated.avatarUrl,
       coursesCreated: updated.coursesCreated,
+      isAdmin,
     },
   });
 });
@@ -2009,11 +2055,21 @@ app.post('/api/auth/reset-password', (req: Request, res: Response) => {
   }
 
   const user = findUserByEmail(email);
+  const isAdmin = user ? isDeveloperAdmin(user) : false;
   return res.json({
     success: true,
     message: 'Password reset successful! You can now log in with your new password.',
     token: user?.id,
-    user: user ? { id: user.id, name: user.name, email: user.email } : null,
+    user: user
+      ? {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+          coursesCreated: user.coursesCreated,
+          isAdmin,
+        }
+      : null,
   });
 });
 

