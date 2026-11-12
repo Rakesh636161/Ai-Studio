@@ -9833,6 +9833,26 @@ app.post('/api/video/create-course', authenticateUser, (req: Request, res: Respo
   });
 });
 
+// Ensure all unmatched API routes return JSON 404 and NEVER fall through to Vite SPA index.html
+app.all('/api/*', (req: Request, res: Response) => {
+  return res.status(404).json({
+    error: `API endpoint ${req.method} ${req.path} not found`,
+    status: 404,
+  });
+});
+
+// Express error-handling middleware for API requests
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api/')) {
+    console.error('[API Server Error]', req.method, req.path, err);
+    return res.status(err.status || 500).json({
+      error: err.message || 'Internal server error',
+      status: err.status || 500,
+    });
+  }
+  next(err);
+});
+
 // Development or Production handler
 async function startServer() {
 

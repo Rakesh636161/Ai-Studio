@@ -51,25 +51,31 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
     const fetchData = async () => {
       const token = localStorage.getItem('coursestudio_token') || user.id;
       try {
+        const headers = {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        };
         const [sumRes, enrolledRes, userCoursesRes] = await Promise.all([
-          fetch('/api/progress/summary', { headers: { Authorization: `Bearer ${token}` } }),
-          fetch('/api/courses/enrolled', { headers: { Authorization: `Bearer ${token}` } }),
-          fetch('/api/courses', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/progress/summary', { headers }),
+          fetch('/api/courses/enrolled', { headers }),
+          fetch('/api/courses', { headers }),
         ]);
 
-        if (sumRes.ok) {
+        if (sumRes.ok && sumRes.headers.get('content-type')?.includes('application/json')) {
           const data = await sumRes.json();
-          setSummary(data.summary);
+          if (data?.summary) {
+            setSummary(data.summary);
+          }
         }
 
         let list: Course[] = [];
-        if (enrolledRes.ok) {
+        if (enrolledRes.ok && enrolledRes.headers.get('content-type')?.includes('application/json')) {
           const enrolledData = await enrolledRes.json();
           if (Array.isArray(enrolledData)) {
             list = enrolledData;
           }
         }
-        if (userCoursesRes.ok) {
+        if (userCoursesRes.ok && userCoursesRes.headers.get('content-type')?.includes('application/json')) {
           const userCourses = await userCoursesRes.json();
           if (Array.isArray(userCourses)) {
             const existingIds = new Set(list.map((c) => c.id));

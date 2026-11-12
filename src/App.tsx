@@ -54,14 +54,36 @@ export default function App() {
         return;
       }
       const res = await fetch('/api/courses', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
       });
-      if (res.ok) {
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok) {
+        if (res.status === 401) {
+          // Stale session or unauthorized
+          console.warn('Authentication expired or unauthorized while fetching courses.');
+        }
+        setCourses([]);
+        return;
+      }
+
+      if (contentType.includes('application/json')) {
         const data = await res.json();
-        setCourses(data);
+        if (Array.isArray(data)) {
+          setCourses(data);
+        } else {
+          setCourses([]);
+        }
+      } else {
+        console.warn('Received unexpected non-JSON response from /api/courses:', contentType);
+        setCourses([]);
       }
     } catch (err) {
-      console.error('Failed fetching courses:', err);
+      console.warn('Could not load courses safely:', err);
+      setCourses([]);
     }
   };
 
@@ -69,16 +91,33 @@ export default function App() {
     const token = localStorage.getItem('coursestudio_token');
     if (token) {
       fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
       })
-        .then(res => (res.ok ? res.json() : null))
-        .then(data => {
+        .then(async (res) => {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
+            return res.json();
+          }
+          if (res.status === 401) {
+            // Token is invalid/expired
+            localStorage.removeItem('coursestudio_token');
+            localStorage.removeItem('coursestudio_user');
+            setUser(null);
+          }
+          return null;
+        })
+        .then((data) => {
           if (data?.user) {
             setUser(data.user);
             localStorage.setItem('coursestudio_user', JSON.stringify(data.user));
           }
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.warn('Session verification error:', err);
+        });
     }
   }, []);
 
