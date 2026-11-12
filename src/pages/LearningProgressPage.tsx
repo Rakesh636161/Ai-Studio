@@ -32,12 +32,14 @@ interface LearningProgressPageProps {
   user: User;
   courses: Course[];
   onLogout: () => void;
+  onRefreshCourses?: () => void;
 }
 
 export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
   user,
   courses,
   onLogout,
+  onRefreshCourses,
 }) => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,21 +51,42 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
     const fetchData = async () => {
       const token = localStorage.getItem('coursestudio_token') || user.id;
       try {
-        const [sumRes, enrolledRes] = await Promise.all([
+        const [sumRes, enrolledRes, userCoursesRes] = await Promise.all([
           fetch('/api/progress/summary', { headers: { Authorization: `Bearer ${token}` } }),
           fetch('/api/courses/enrolled', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/courses', { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         if (sumRes.ok) {
           const data = await sumRes.json();
           setSummary(data.summary);
         }
+
+        let list: Course[] = [];
         if (enrolledRes.ok) {
           const enrolledData = await enrolledRes.json();
           if (Array.isArray(enrolledData)) {
-            setEnrolledCourses(enrolledData);
+            list = enrolledData;
           }
         }
+        if (userCoursesRes.ok) {
+          const userCourses = await userCoursesRes.json();
+          if (Array.isArray(userCourses)) {
+            const existingIds = new Set(list.map((c) => c.id));
+            for (const c of userCourses) {
+              if (!existingIds.has(c.id)) {
+                list.push(c);
+                existingIds.add(c.id);
+              }
+            }
+          }
+        }
+
+        if (list.length === 0 && courses && courses.length > 0) {
+          list = courses;
+        }
+
+        setEnrolledCourses(list);
       } catch (err) {
         console.warn('Failed loading progress data:', err);
       } finally {
@@ -71,10 +94,32 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
       }
     };
     fetchData();
+    onRefreshCourses?.();
   }, [user.id]);
 
-  // Sync with courses prop if enrolled courses is empty but prop has courses
+  // Keep enrolledCourses in sync whenever courses prop updates
+  useEffect(() => {
+    if (courses && courses.length > 0) {
+      setEnrolledCourses((prev) => {
+        const map = new Map<string, Course>();
+        prev.forEach((c) => map.set(c.id, c));
+        courses.forEach((c) => map.set(c.id, c));
+        return Array.from(map.values());
+      });
+    }
+  }, [courses]);
+
+  // Unified courses list
   const displayCourses = enrolledCourses.length > 0 ? enrolledCourses : courses;
+
+  // Real database-driven calculations
+  const computedTotalChapters = displayCourses.reduce((acc, c) => acc + (c.chapters?.length || 0), 0);
+  const computedCompletedChapters = displayCourses.reduce(
+    (acc, c) => acc + (c.chapters?.filter((ch) => ch.completed).length || 0),
+    0
+  );
+  const effectiveTotalChapters = summary && summary.totalChapters > 0 ? summary.totalChapters : computedTotalChapters;
+  const effectiveCompletedChapters = summary ? summary.completedChapters : computedCompletedChapters;
 
   const totalLearningHours = summary
     ? Math.floor(summary.totalLearningMinutes / 60)
@@ -127,7 +172,7 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                 {displayCourses.length}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {summary?.completedCourses || 0} completed · {summary?.inProgressCourses || displayCourses.length} active
+                {summary?.completedCourses || 0} completed · {Math.max(0, displayCourses.length - (summary?.completedCourses || 0))} active
               </p>
             </div>
 
@@ -140,11 +185,11 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                 </div>
               </div>
               <div className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100">
-                {summary ? `${summary.completedChapters} / ${summary.totalChapters}` : '0 / 0'}
+                {effectiveTotalChapters > 0 ? `${effectiveCompletedChapters} / ${effectiveTotalChapters}` : '0 / 0'}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {summary && summary.totalChapters > 0
-                  ? `${Math.round((summary.completedChapters / summary.totalChapters) * 100)}% overall completion`
+                {effectiveTotalChapters > 0
+                  ? `${Math.round((effectiveCompletedChapters / effectiveTotalChapters) * 100)}% overall completion`
                   : '0% completed'}
               </p>
             </div>
@@ -174,11 +219,17 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                 </div>
               </div>
               <div className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100">
-                {summary?.overallScoreAverage || 85}%
+                {summary && (summary.totalQuizzesAttempted || 0) > 0
+                  ? `${summary.overallScoreAverage}%`
+                  : 'Not attempted'}
               </div>
               <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-1 flex items-center gap-1">
                 <Flame className="w-3 h-3 fill-current" />
-                <span>{summary?.currentStreakDays || 1}-day active study streak</span>
+                <span>
+                  {summary && (summary.currentStreakDays || 0) > 0
+                    ? `${summary.currentStreakDays}-day active study streak`
+                    : '0-day study streak'}
+                </span>
               </p>
             </div>
           </div>
@@ -231,6 +282,11 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                   const remainingChs = Math.max(0, totalChs - completedChs);
                   const pct = course.progress !== undefined ? course.progress : Math.round((completedChs / totalChs) * 100);
                   const isDone = pct === 100 || completedChs >= totalChs;
+                  const assessedChapters = course.chapters?.filter((ch) => typeof ch.assessmentScore === 'number') || [];
+                  const avgCourseScore =
+                    assessedChapters.length > 0
+                      ? Math.round(assessedChapters.reduce((acc, ch) => acc + (ch.assessmentScore || 0), 0) / assessedChapters.length)
+                      : null;
 
                   return (
                     <div
@@ -287,7 +343,12 @@ export const LearningProgressPage: React.FC<LearningProgressPageProps> = ({
                           </div>
 
                           <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
-                            <span>Quiz Mastery: <strong className="text-slate-700 dark:text-slate-300">85%+</strong></span>
+                            <span>
+                              Quiz Mastery:{' '}
+                              <strong className={avgCourseScore !== null ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'}>
+                                {avgCourseScore !== null ? `${avgCourseScore}%` : 'Not attempted'}
+                              </strong>
+                            </span>
                             <button
                               onClick={() => navigate(isDone ? `/course/${course.id}/final-exam` : `/course/${course.id}/start`)}
                               className="font-bold text-[#8150E8] hover:text-[#7040D6] flex items-center gap-1 cursor-pointer"

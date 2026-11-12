@@ -872,10 +872,10 @@ function loadLocalFile(): void {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (parsed.users && parsed.users.length > 0) {
+      if (parsed.users && Array.isArray(parsed.users)) {
         memoryCache.users = parsed.users;
       }
-      if (parsed.courses && parsed.courses.length > 0) {
+      if (parsed.courses && Array.isArray(parsed.courses)) {
         memoryCache.courses = parsed.courses;
       }
       if (parsed.otps) {
@@ -2206,7 +2206,7 @@ export function getAccurateUserProgressSummary(userId: string): UserProgressSumm
     totalMinutes += Math.round(a.durationSeconds / 60);
   });
 
-  const overallScoreAverage = totalScoreCount > 0 ? Math.round(totalScoreSum / totalScoreCount) : 85;
+  const overallScoreAverage = totalScoreCount > 0 ? Math.round(totalScoreSum / totalScoreCount) : 0;
 
   // Calculate real activity counts for the last 7 calendar days
   const today = new Date();
@@ -2233,19 +2233,24 @@ export function getAccurateUserProgressSummary(userId: string): UserProgressSumm
     });
   }
 
-  // Calculate active streak
+  // Calculate active streak based on consecutive active days
   const userActivities = getUserActivities(userId, 50);
   let streakDays = 0;
   if (userActivities.length > 0) {
     const activeDates = new Set(userActivities.map(a => a.timestamp.split('T')[0]));
-    let checkDate = new Date();
-    while (activeDates.has(checkDate.toISOString().split('T')[0])) {
-      streakDays++;
-      checkDate.setDate(checkDate.getDate() - 1);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // User has an active streak if they studied today or yesterday
+    if (activeDates.has(todayStr) || activeDates.has(yesterdayStr)) {
+      let checkDate = activeDates.has(todayStr) ? new Date() : yesterday;
+      while (activeDates.has(checkDate.toISOString().split('T')[0])) {
+        streakDays++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
     }
-    if (streakDays === 0) streakDays = 1;
-  } else {
-    streakDays = 0;
   }
 
   return {
@@ -2256,8 +2261,9 @@ export function getAccurateUserProgressSummary(userId: string): UserProgressSumm
     completedChapters,
     totalLearningMinutes: totalMinutes,
     overallScoreAverage,
-    currentStreakDays: Math.max(1, streakDays),
-    streakDays: Math.max(1, streakDays),
+    totalQuizzesAttempted: totalScoreCount,
+    currentStreakDays: streakDays,
+    streakDays,
     weeklyActivity,
     recentActivities: userActivities.slice(0, 10),
     finalExamStats: {

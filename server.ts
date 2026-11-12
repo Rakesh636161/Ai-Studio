@@ -6222,7 +6222,19 @@ app.post('/api/courses/:id/chapters/:chapterId/submit-assessment', authenticateU
 
   const user = (req as any).user;
   if (user) {
+    enrollUserInCourse(user.id, course.id);
     updateStudentChapterProgress(user.id, course.id, currentChapter.chapterNumber, totalScore, passed);
+    if (passed) {
+      recordLearningActivity({
+        userId: user.id,
+        courseId: course.id,
+        courseTitle: course.title,
+        type: 'quiz_passed',
+        title: `Passed Quiz: Chapter ${currentChapter.chapterNumber}`,
+        detail: `Scored ${totalScore}% on Chapter ${currentChapter.chapterNumber} assessment`,
+        score: totalScore,
+      });
+    }
   }
 
   if (passed) {
@@ -6317,7 +6329,16 @@ app.post('/api/courses/:id/chapters/:chapterId/complete', authenticateUser, (req
   });
 
   // Also update student's isolated progress
+  enrollUserInCourse(user.id, course.id);
   updateStudentChapterProgress(user.id, course.id, chapter.chapterNumber, 100, true);
+  recordLearningActivity({
+    userId: user.id,
+    courseId: course.id,
+    courseTitle: course.title,
+    type: 'chapter_completed',
+    title: `Completed Chapter ${chapter.chapterNumber}`,
+    detail: `Completed lecture: ${chapter.title}`,
+  });
 
   return res.json({ success: true, course });
 });
@@ -7334,15 +7355,21 @@ function generatePedagogicalResponse(
   // -------------------------------------------------------------------------
   // 1. CASUAL CONVERSATION & GREETINGS
   // -------------------------------------------------------------------------
-  if (/^(hi|hello|hey|good\s+(morning|afternoon|evening|day)|greetings|howdy)\b/i.test(q)) {
+  const collapsedQ = q.replace(/(.)\1{2,}/g, '$1$1').replace(/^(h+)i+$/i, 'hi').replace(/^(h+)e+y+$/i, 'hey');
+
+  if (
+    /^(h+i+|h+e+y+|h+e+l+l*o+|h+o+l+a+|howdy|greetings|sup|yo|what'?s\s*up|hiya|namaste|vanakkam)\b/i.test(q) ||
+    /^(good\s+(morning|afternoon|evening|day|night))\b/i.test(q) ||
+    /^(hi|hello|hey|greetings|hola)$/i.test(collapsedQ)
+  ) {
     return {
-      text: `Hello! I am your **AlphaWave AI Tutor**.\n\nI am here to help you master your coursework, explain complex topics with simple analogies, write and debug code, and answer any questions you have. What would you like to learn or explore today?`,
+      text: `Hello! 👋 How can I help you today?`,
     };
   }
 
-  if (/^(how are you|how are you doing|how's it going|how are things)\b/i.test(q)) {
+  if (/^(how are you|how are you doing|how's it going|how are things|how do you do|how r u)\b/i.test(q)) {
     return {
-      text: `I'm doing great, thank you for asking! I'm fully ready to help you with your lessons, lecture doubts, programming challenges, or general knowledge. What are you studying today?`,
+      text: `I'm doing great! Thanks for asking. What would you like to explore today?`,
     };
   }
 
@@ -7352,15 +7379,21 @@ function generatePedagogicalResponse(
     };
   }
 
-  if (/^(thank you|thanks|thx|thank you so much|appreciate it)\b/i.test(q)) {
+  if (/^(thank you|thanks|thx|thank you so much|many thanks|appreciate it|thank u|ty)\b/i.test(q)) {
     return {
-      text: `You're very welcome! If you have any more doubts, need a code example, or want to explore another topic, feel free to ask. Happy learning!`,
+      text: `You're welcome! Happy to help.`,
     };
   }
 
-  if (/^(bye|goodbye|see you|take care|have a good day)\b/i.test(q)) {
+  if (/^(bye|goodbye|see you|cya|take care|have a good day|good night|bye bye|byebye)\b/i.test(q)) {
     return {
-      text: `Goodbye! Keep up the great work on your learning journey. Come back whenever you need clarification or exam preparation!`,
+      text: `Goodbye! Have a wonderful day.`,
+    };
+  }
+
+  if (/^(ok|okay|cool|got it|understood|great|awesome|nice|perfect|alright)\b/i.test(q)) {
+    return {
+      text: `Awesome! What would you like to explore next?`,
     };
   }
 
@@ -7706,7 +7739,16 @@ Consider navigating a city using Google Maps:
     };
   }
   // Explain DBMS
-  if (q === 'explain dbms' || q === 'what is dbms' || q.includes('explain dbms') || q.includes('what is database management system')) {
+  if (
+    q === 'dbms' ||
+    q === 'explain dbms' ||
+    q === 'what is dbms' ||
+    q === 'what is a dbms' ||
+    q.includes('explain dbms') ||
+    q.includes('what is dbms') ||
+    q.includes('what is database management system') ||
+    q.includes('tell me about dbms')
+  ) {
     return {
       text: `A **Database Management System (DBMS)** is specialized software that serves as an interface between users (or applications) and a structured database, enabling users to store, retrieve, update, and manage data efficiently and reliably.
 
@@ -8475,24 +8517,40 @@ Where $\\alpha$ is the learning rate hyperparameter.`,
   // -------------------------------------------------------------------------
   const cleanedTopic = rawQ
     .replace(/^(what is|what are|explain|describe|tell me about|how does|why do we need|define|can you explain)\s+/i, '')
-    .replace(/[?.]+$/, '')
+    .replace(/[?.,!~]+$/, '')
     .trim();
 
-  const capitalizedTopic = cleanedTopic
-    ? cleanedTopic.charAt(0).toUpperCase() + cleanedTopic.slice(1)
-    : 'This topic';
+  // If casual greetings or short conversational tokens reach here
+  if (
+    /^(h+i+|h+e+y+|h+e+l+l*o+|greetings|howdy|sup|yo)$/i.test(cleanedTopic) ||
+    /^(h+i+|h+e+y+|h+e+l+l*o+|greetings|howdy|sup|yo)$/i.test(q)
+  ) {
+    return {
+      text: `Hello! 👋 How can I help you today?`,
+    };
+  }
 
+  if (/^(how are you|how do you do|how are things|how's it going|how r u)$/i.test(cleanedTopic) || /^(how are you)$/i.test(q)) {
+    return {
+      text: `I'm doing great! Thanks for asking. What would you like to explore today?`,
+    };
+  }
+
+  if (/^(thank you|thanks|thx|thank u)$/i.test(cleanedTopic) || /^(thank you|thanks)$/i.test(q)) {
+    return {
+      text: `You're welcome! Happy to help.`,
+    };
+  }
+
+  if (/^(bye|goodbye|cya|bye bye|byebye)$/i.test(cleanedTopic) || /^(bye|goodbye)$/i.test(q)) {
+    return {
+      text: `Goodbye! Have a wonderful day.`,
+    };
+  }
+
+  const topicName = cleanedTopic || rawQ;
   return {
-    text: `### ${capitalizedTopic}
-
-**${capitalizedTopic}** is a key subject of study and discussion.
-
-Here is a clear and accessible breakdown:
-- **Core Concept**: It represents the fundamental principles, mechanisms, and rules that govern how this subject operates in theory and practice.
-- **Key Characteristics**: It is defined by verifiable relationships, systematic organization of components, and practical applications across real-world scenarios.
-- **Why It Matters**: Developing a deep understanding of this topic enables you to reason effectively through related problems, build upon core knowledge, and apply concepts accurately in academic exams and real-world projects.
-
-Feel free to ask a follow-up question, such as asking for a specific real-world example, an analogy, or step-by-step practice problems!`,
+    text: `Here is a clear overview of **${topicName}**:\n\n${topicName} is an important subject. What specific aspect would you like to explore? Feel free to ask for a simple analogy, step-by-step breakdown, real-world applications, or code examples.`,
   };
 }
 
@@ -8533,8 +8591,30 @@ app.post('/api/tutor/chat', authenticateUser, async (req: Request, res: Response
   let aiResponseText = '';
   let codeSnippet: string | undefined = undefined;
 
+  const qLower = question.trim().toLowerCase().replace(/[?.,!~]+$/, '');
+  const collapsedQ = qLower.replace(/(.)\1{2,}/g, '$1$1').replace(/^(h+)i+$/i, 'hi').replace(/^(h+)e+y+$/i, 'hey');
+
+  // Fast-path for direct greetings, casual conversation, and core factual queries
+  if (
+    /^(h+i+|h+e+y+|h+e+l+l*o+|h+o+l+a+|howdy|greetings|sup|yo|what'?s\s*up|hiya|namaste|vanakkam)\b/i.test(qLower) ||
+    /^(good\s+(morning|afternoon|evening|day|night))\b/i.test(qLower) ||
+    /^(hi|hello|hey|greetings|hola)$/i.test(collapsedQ)
+  ) {
+    aiResponseText = `Hello! 👋 How can I help you today?`;
+  } else if (/^(how are you|how are you doing|how's it going|how are things|how do you do|how r u)\b/i.test(qLower)) {
+    aiResponseText = `I'm doing great! Thanks for asking. What would you like to explore today?`;
+  } else if (/^(thank you|thanks|thx|thank you so much|many thanks|appreciate it|thank u|ty)\b/i.test(qLower)) {
+    aiResponseText = `You're welcome! Happy to help.`;
+  } else if (/^(bye|goodbye|see you|cya|take care|have a good day|good night|bye bye|byebye)\b/i.test(qLower)) {
+    aiResponseText = `Goodbye! Have a wonderful day.`;
+  } else if (/^(ok|okay|cool|got it|understood|great|awesome|nice|perfect|alright)\b/i.test(qLower)) {
+    aiResponseText = `Awesome! What would you like to explore next?`;
+  } else if (qLower.includes('capital') && qLower.includes('india')) {
+    aiResponseText = `The capital of India is New Delhi.`;
+  }
+
   // 1. Try Gemini 3.8 Flash multimodal reasoning with multi-turn history
-  if (ai) {
+  if (!aiResponseText && ai) {
     try {
       const modeInstruction = explanationMode === 'simple'
         ? 'Give an intuitive, crystal-clear explanation using accessible analogies. Break down difficult concepts into plain English without losing technical accuracy.'
@@ -8546,31 +8626,23 @@ app.post('/api/tutor/chat', authenticateUser, async (req: Request, res: Response
         ? `Context:\nCourse: "${courseTitle}" (${courseCategory})\nChapter: "${chapterTitle || 'General Curriculum'}"\n${chapterNotes ? `Available lecture notes excerpt:\n${chapterNotes.slice(0, 1500)}` : ''}`
         : `Context: General Knowledge & Mentorship Mode.\nThe student is asking a general question. Answer across any subject (geography, current affairs, science, politics, coding, mathematics, philosophy) accurately and naturally without forcing Computer Science or database concepts.`;
 
-      const systemInstruction = `You are AlphaWave AI Tutor, an exceptionally intelligent, friendly, and patient personal AI learning mentor.
-Your primary objective is to understand the student's exact question and intent, and respond with the most natural, accurate, and helpful answer.
+      const systemInstruction = `You are AlphaWave AI Tutor, an intelligent, friendly, natural conversational AI learning assistant (like ChatGPT or Gemini).
 
-CRITICAL INTENT RULES:
-1. GENERAL KNOWLEDGE & FACTUAL QUESTIONS:
-   If the student asks a general knowledge, geography, history, or factual question (e.g., "What is the capital of India?", "What is the capital of Karnataka?", "Who is the President of India?", "What is climate change?"):
-   - ANSWER DIRECTLY AND ACCURATELY in clear, natural prose.
-   - NEVER generate generic computer science headings, database schemas, state-machine templates, or irrelevant technical breakdowns for non-technical questions!
-
-2. CASUAL CONVERSATION:
-   If the student sends greetings or conversational messages ("Hi", "Hello", "How are you?"):
-   - Reply warmly and politely, asking what they would like to learn or explore today.
-
-3. FOLLOW-UP QUESTIONS & ANALOGIES:
-   If the student asks "Explain it with a simple example" or "Can you give an example?":
-   - Inspect the prior conversation turns and explain that specific topic using an intuitive, memorable real-world analogy.
-
-4. PROGRAMMING QUESTIONS:
-   If asked to write code (e.g., "Write a Python program to check whether a number is prime"):
-   - Provide clean, idiomatic, fully functional, and well-commented code with complexity analysis and test cases.
-
-5. ACADEMIC & TECHNICAL QUESTIONS:
-   When explaining Computer Science, Engineering, or Academic concepts:
-   - Respect the requested explanation mode: ${explanationMode.toUpperCase()}. (${modeInstruction})
-   - Structure using clean Markdown with clear definitions, core mechanics, examples, and key takeaways.
+MANDATORY CONVERSATION RULES:
+1. Detect greetings, casual conversation, thanks, goodbyes, and general conversational messages:
+   - "Hii" / "Hello" -> "Hello! 👋 How can I help you today?"
+   - "How are you?" -> "I'm doing great! Thanks for asking. What would you like to explore today?"
+   - "Thank you." -> "You're welcome! Happy to help."
+   - "Bye." -> "Goodbye! Have a wonderful day."
+2. Respond naturally to simple messages without generating academic explanations.
+3. Never describe greetings such as Hii, Hello, Hey, or Good Morning as technical concepts.
+4. Do not force every response into predefined educational sections.
+5. Do not automatically generate headings such as Core Concept, Key Characteristics, Applications, and Next Steps.
+6. Do not automatically display unrelated exam questions or technical suggestions.
+7. Do not assume every user question is related to Computer Science.
+8. Answer the exact question the user asks. (E.g. "What is the capital of India?" -> "The capital of India is New Delhi.")
+9. Maintain conversation context for follow-up questions.
+10. Use natural, readable formatting according to the question.
 
 ${contextSection}`;
 

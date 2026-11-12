@@ -215,6 +215,7 @@ export default function App() {
               <LearningProgressPage
                 user={user}
                 courses={courses}
+                onRefreshCourses={fetchCourses}
                 onLogout={handleLogout}
               />
             ) : (

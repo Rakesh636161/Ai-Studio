@@ -274,6 +274,7 @@ export interface UserProgressSummary {
   completedChapters: number;
   totalLearningMinutes: number;
   overallScoreAverage: number;
+  totalQuizzesAttempted?: number;
   currentStreakDays: number;
   streakDays: number;
   weeklyActivity: Array<{ day: string; minutes: number; chapters: number }>;
