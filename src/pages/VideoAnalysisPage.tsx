@@ -863,7 +863,7 @@ export const VideoAnalysisPage: React.FC<VideoAnalysisPageProps> = ({
               )}
 
               {/* Matched English Reference Videos */}
-              {analysis.recommendedEnglishVideos && analysis.recommendedEnglishVideos.length > 0 && (
+              {analysis.recommendedEnglishVideos && analysis.recommendedEnglishVideos.length > 0 ? (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                     <div className="flex items-center gap-2">
@@ -908,6 +908,10 @@ export const VideoAnalysisPage: React.FC<VideoAnalysisPageProps> = ({
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-900 p-5 text-xs text-amber-800 dark:text-amber-200 font-medium">
+                  No relevant educational videos found for this chapter. Please try again later.
                 </div>
               )}
             </div>

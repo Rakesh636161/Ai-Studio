@@ -100,6 +100,15 @@ export interface EducationalVideo {
   matchCategory?: 'excellent' | 'good' | 'fair';
 }
 
+export interface VideoRelevanceEvaluation {
+  isRelevant: boolean;
+  courseTopic: string;
+  chapter: string;
+  videoTitle: string;
+  relevanceScore: number; // 0 to 100
+  reason: string;
+}
+
 export type VideoRecommendation = EducationalVideo;
 
 export interface CourseChapter {
@@ -116,6 +125,9 @@ export interface CourseChapter {
   videoChannel?: string;
   relevanceScore?: number;
   videoMatchReason?: string;
+  videoSearchQuery?: string;
+  videoStatus?: 'found' | 'no_relevant_videos' | 'api_error' | 'disabled';
+  videoMessage?: string;
   alternativeVideos?: EducationalVideo[];
   completed: boolean;
   isUnlocked: boolean; // Locked until previous lecture is passed with >= 75%

@@ -636,17 +636,19 @@ export const CourseLearningPage: React.FC = () => {
               </div>
 
               {/* Embedded YouTube Video Player & Recommendation Details */}
-              {course.includeVideo && currentChapter.videoId && (
+              {course.includeVideo && currentChapter.videoId ? (
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-800">Educational Video Lecture</span>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-bold text-slate-800 truncate">
+                        {currentChapter.videoTitle || 'Educational Video Lecture'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
                         ✓ {currentChapter.relevanceScore || 96}% Concept Score
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                       <a
                         href={`https://www.youtube.com/watch?v=${currentChapter.videoId}`}
                         target="_blank"
@@ -679,7 +681,7 @@ export const CourseLearningPage: React.FC = () => {
                   <div className="rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-black aspect-16/9 w-full">
                     <iframe
                       src={`https://www.youtube.com/embed/${currentChapter.videoId}?autoplay=0&rel=0`}
-                      title={currentChapter.title}
+                      title={currentChapter.videoTitle || currentChapter.title}
                       className="w-full h-full border-0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
@@ -699,13 +701,37 @@ export const CourseLearningPage: React.FC = () => {
                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-150 text-xs text-slate-600 flex items-start gap-2.5">
                       <Sparkles className="w-4 h-4 text-[#8150E8] shrink-0 mt-0.5" />
                       <div className="leading-relaxed">
-                        <strong className="text-slate-900 block mb-0.5">Transparent 6-Factor Recommendation Match:</strong>
+                        <strong className="text-slate-900 block mb-0.5">Transparent Relevance Verification:</strong>
                         <span>{currentChapter.videoMatchReason}</span>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+              ) : course.includeVideo ? (
+                <div className="bg-amber-50/70 rounded-2xl border border-amber-200 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                      <VideoIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        {currentChapter.videoMessage || 'No relevant educational videos found for this chapter. Please try again later.'}
+                      </h3>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Only verified videos matching both the course topic and this specific chapter are displayed. You can still link a custom YouTube tutorial manually if desired.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-purple-700 bg-white hover:bg-purple-50 rounded-xl border border-purple-200 transition-colors shrink-0 cursor-pointer"
+                  >
+                    <VideoIcon className="w-3.5 h-3.5" />
+                    <span>Add Custom Video</span>
+                  </button>
+                </div>
+              ) : null}
 
               {/* Study Notes & Lecture Guide */}
               {currentChapter.content && (
@@ -1183,20 +1209,26 @@ export const CourseLearningPage: React.FC = () => {
 
             <div className="space-y-3">
               {/* Current video */}
-              <div className="p-3.5 rounded-xl border-2 border-[#8150E8] bg-purple-50/40">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                    Currently Selected Video
-                  </span>
-                  <span className="text-xs font-bold text-emerald-700">
-                    {currentChapter.relevanceScore || 96}% Score
-                  </span>
+              {currentChapter.videoId ? (
+                <div className="p-3.5 rounded-xl border-2 border-[#8150E8] bg-purple-50/40">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                      Currently Selected Video
+                    </span>
+                    <span className="text-xs font-bold text-emerald-700">
+                      {currentChapter.relevanceScore || 96}% Score
+                    </span>
+                  </div>
+                  <h4 className="text-xs font-bold text-slate-900">{currentChapter.videoTitle || currentChapter.title}</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Channel: {currentChapter.videoChannel || 'AlphaWave Educational Network'}
+                  </p>
                 </div>
-                <h4 className="text-xs font-bold text-slate-900">{currentChapter.title}</h4>
-                <p className="text-[11px] text-slate-500">
-                  Channel: {currentChapter.videoChannel || 'AlphaWave Educational Network'}
-                </p>
-              </div>
+              ) : (
+                <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/70 text-xs text-amber-800 font-medium">
+                  {currentChapter.videoMessage || 'No relevant educational videos found for this chapter. Please try again later.'}
+                </div>
+              )}
 
               {/* Alternatives */}
               <div className="pt-2">

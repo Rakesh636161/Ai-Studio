@@ -1,5 +1,6 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -7,8 +8,21 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import nodemailer from 'nodemailer';
+import {
+  recommendVideosForChapter,
+  recommendVideosForCourseChapters,
+  applyVideoRecommendationToChapter,
+  evaluateVideoRelevanceDeterministic,
+  evaluateVideosWithGemini,
+  generateChapterSearchQueries,
+  isGeminiQuotaError,
+  isGeminiModelOnCooldown,
+  markGeminiModelCooldown,
+  NO_RELEVANT_VIDEOS_MESSAGE,
+  DEFAULT_RELEVANCE_THRESHOLD,
+} from './src/server/videoRecommendationService.ts';
 import {
   findUserByEmail,
   findUserById,
@@ -77,13 +91,14 @@ import type {
   FinalExamAttempt,
   FinalExamStatus,
   LearningActivityRecord,
+  VideoRelevanceEvaluation,
 } from './src/types/index.ts';
 
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Support large JSON payloads for handwritten answer image uploads
@@ -1203,227 +1218,41 @@ function computeRelevanceScore(
   return { score: finalScore, matchReason, matchCategory };
 }
 
-// Module 4: Intelligent Video Search Service with AI query synthesis
+// Module 4: Strict Topic-Based & AI-Verified Video Search Service
 async function searchEducationalVideos(
   topic: string,
   chapterTitle: string = '',
   difficulty: string = 'Beginner',
   category: string = 'General',
-  limit: number = 3
+  limit: number = 3,
+  usedVideoIds: Set<string> = new Set()
 ): Promise<EducationalVideo[]> {
-  const cleanTopic = topic.replace(/^(introduction to|learn|basics of|course on)\s+/i, '').trim();
-  const cleanChapter = chapterTitle.trim();
-  const cacheKey = `${cleanTopic}::${cleanChapter}::${difficulty}::${limit}`;
-
-  if (scoredVideoCache.has(cacheKey)) {
-    return scoredVideoCache.get(cacheKey)!;
-  }
-
-  // 1. YouTube Data API v3 Search
-  if (YOUTUBE_API_KEY && YOUTUBE_API_KEY.startsWith('AIzaSy')) {
-    try {
-      const searchTerms = `${cleanTopic} ${cleanChapter} tutorial in English -hindi -urdu -tamil -reaction -shorts -music`.trim();
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&type=video&videoEmbeddable=true&relevanceLanguage=en&q=${encodeURIComponent(searchTerms)}&key=${YOUTUBE_API_KEY}`;
-      const searchRes = await fetch(searchUrl);
-
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        const items = searchData.items || [];
-        const videoIds = items.map((i: any) => i.id?.videoId).filter(Boolean).join(',');
-
-        if (videoIds) {
-          const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=${videoIds}&key=${YOUTUBE_API_KEY}`;
-          const detailsRes = await fetch(detailsUrl);
-
-          if (detailsRes.ok) {
-            const detailsData = await detailsRes.json();
-            const candidates: EducationalVideo[] = (detailsData.items || []).map((v: any) => {
-              const dur = parseISO8601Duration(v.contentDetails?.duration);
-              const scoreEval = computeRelevanceScore(
-                v.snippet?.title || '',
-                v.snippet?.description || '',
-                cleanTopic,
-                cleanChapter,
-                dur.minutes,
-                [cleanChapter],
-                [`Master ${cleanChapter}`],
-                difficulty
-              );
-              return {
-                id: v.id,
-                title: v.snippet?.title || cleanChapter || cleanTopic,
-                channel: v.snippet?.channelTitle || 'YouTube Educator',
-                duration: dur.formatted,
-                topic: cleanChapter || cleanTopic,
-                relevanceScore: scoreEval.score,
-                matchReason: scoreEval.matchReason,
-                matchCategory: scoreEval.matchCategory,
-                embedUrl: `https://www.youtube.com/embed/${v.id}`,
-                thumbnailUrl: v.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${v.id}/mqdefault.jpg`,
-                isEmbeddable: v.status?.embeddable !== false,
-              };
-            });
-
-            // Filter out low-relevance or non-embeddable videos
-            const filtered = candidates
-              .filter(c => c.relevanceScore >= 50 && c.isEmbeddable)
-              .sort((a, b) => b.relevanceScore - a.relevanceScore)
-              .slice(0, limit);
-
-            if (filtered.length > 0) {
-              scoredVideoCache.set(cacheKey, filtered);
-              return filtered;
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('[YouTube Data API Notice]:', err?.message);
-    }
-  }
-
-  // 2. Domain-verified Fallback Engine (Guaranteed zero irrelevant videos!)
-  const pool = getDomainPool(cleanTopic);
-
-  // Find videos matching the chapter
-  let matched = pool.filter(v => {
-    if (!cleanChapter) return true;
-    const chLower = cleanChapter.toLowerCase();
-    return v.title.toLowerCase().includes(chLower) || (v.topic && v.topic.toLowerCase().includes(chLower));
-  });
-
-  if (matched.length === 0) {
-    matched = pool;
-  }
-
-  const results = matched.slice(0, limit);
-  scoredVideoCache.set(cacheKey, results);
-  return results;
+  const result = await recommendVideosForChapter(
+    {
+      courseTopic: topic,
+      category,
+      chapterTitle: chapterTitle || topic,
+      difficulty,
+      limit,
+    },
+    usedVideoIds,
+    { ai, youtubeApiKey: YOUTUBE_API_KEY }
+  );
+  return result.approvedVideos.slice(0, limit);
 }
 
-// Helper to retrieve the curated domain educational playlist
-function getDomainPool(topic: string): EducationalVideo[] {
-  const t = (topic || '').toLowerCase();
-  // 1. DBMS & Databases (must NEVER be misclassified as programming languages or Python)
-  if (
-    t.includes('dbms') ||
-    t.includes('database') ||
-    t.includes('relational') ||
-    t.includes('normalization') ||
-    t.includes('functional depend') ||
-    t.includes('er diagram') ||
-    t.includes('entity relationship') ||
-    t.includes('sql') ||
-    t.includes('acid') ||
-    t.includes('bcnf') ||
-    t.includes('b-tree')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.dbms || DOMAIN_EDUCATIONAL_VIDEOS.sql;
-  }
-  // 2. Computer Networks
-  if (
-    t.includes('network') ||
-    t.includes('tcp') ||
-    t.includes('osi') ||
-    t.includes('ip address') ||
-    t.includes('subnet') ||
-    t.includes('routing protocol') ||
-    t.includes('packet')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.networks;
-  }
-  // 3. Operating Systems
-  if (
-    t.includes('operating system') ||
-    t.includes('deadlock') ||
-    t.includes('cpu scheduling') ||
-    t.includes('process scheduling') ||
-    t.includes('paging') ||
-    t.includes('virtual memory') ||
-    t.includes('semaphore') ||
-    t.includes('mutex')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.os || DOMAIN_EDUCATIONAL_VIDEOS.general;
-  }
-  // 4. Computer Vision
-  if (
-    t.includes('computer vision') ||
-    t.includes('convolution') ||
-    t.includes('image processing') ||
-    t.includes('edge detection') ||
-    t.includes('object detection') ||
-    t.includes('opencv')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.cv || DOMAIN_EDUCATIONAL_VIDEOS.general;
-  }
-  // 5. Software Engineering
-  if (
-    t.includes('software engineering') ||
-    t.includes('sdlc') ||
-    t.includes('agile') ||
-    t.includes('scrum') ||
-    t.includes('design pattern') ||
-    t.includes('solid principle') ||
-    t.includes('uml')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.se || DOMAIN_EDUCATIONAL_VIDEOS.general;
-  }
-  // 6. Artificial Intelligence
-  if (
-    t.includes('artificial intelligence') ||
-    t.includes('search algorithm') ||
-    t.includes('heuristic') ||
-    t.includes('minimax') ||
-    t.includes('knowledge representation')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.ai || DOMAIN_EDUCATIONAL_VIDEOS.general;
-  }
-  // 7. Machine Learning
-  if (
-    t.includes('machine learning') ||
-    t.includes('deep learning') ||
-    t.includes('neural network') ||
-    t.includes('gradient descent') ||
-    t.includes('supervised learning')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.ml || DOMAIN_EDUCATIONAL_VIDEOS.general;
-  }
-  // 8. Data Structures & Algorithms
-  if (
-    t.includes('dsa') ||
-    t.includes('data structure') ||
-    t.includes('algorithm') ||
-    t.includes('binary tree') ||
-    t.includes('graph traversal') ||
-    t.includes('sorting') ||
-    t.includes('linked list')
-  ) {
-    return DOMAIN_EDUCATIONAL_VIDEOS.dsa;
-  }
-  // 9. Programming Languages (Python, Java, C, C++, JavaScript, React)
-  if (t.includes('python')) return DOMAIN_EDUCATIONAL_VIDEOS.python;
-  if (t.includes('java') && !t.includes('javascript')) return DOMAIN_EDUCATIONAL_VIDEOS.java;
-  if (t.includes('c++') || t.includes('cpp')) return DOMAIN_EDUCATIONAL_VIDEOS.cpp;
-  if (t.includes('c programming') || t.includes('c language') || (t === 'c' && !t.includes('c++') && !t.includes('c#'))) return DOMAIN_EDUCATIONAL_VIDEOS.c;
-  if (t.includes('react') || t.includes('frontend')) return DOMAIN_EDUCATIONAL_VIDEOS.react;
-  if (t.includes('javascript') || t.includes('js') || t.includes('node') || t.includes('web')) return DOMAIN_EDUCATIONAL_VIDEOS.javascript;
-  if (t.includes('fitness') || t.includes('workout') || t.includes('health') || t.includes('gym')) return DOMAIN_EDUCATIONAL_VIDEOS.fitness;
-  return DOMAIN_EDUCATIONAL_VIDEOS.general;
-}
-
-// Module 4: Concept-Targeted Video Assignment Engine
-// Guarantees:
-// 1. ONE CHAPTER = ONE SPECIFIC LEARNING CONCEPT = RELEVANT EDUCATIONAL VIDEOS
-// 2. Returns primary recommended video + alternativeVideos array
-// 3. Distinct video IDs across days (no duplicates)
+// Concept-Targeted Video Assignment Engine (Strictly rejects irrelevant videos, never falls back to unrelated pools)
 async function assignTargetedEducationalVideo(
   topic: string,
   chapterTitle: string,
-  dayIndex: number,
+  _dayIndex: number,
   usedVideoIds: Set<string>,
   targetMinutes: number = 20,
   importantConcepts: string[] = [],
-  learningObjectives: string[] = []
+  learningObjectives: string[] = [],
+  category: string = 'Education',
+  difficulty: string = 'Beginner',
+  suggestedSearchQuery?: string
 ): Promise<{
   id: string;
   title: string;
@@ -1432,140 +1261,56 @@ async function assignTargetedEducationalVideo(
   relevanceScore: number;
   matchReason: string;
   matchCategory: 'excellent' | 'good' | 'fair';
+  status: 'found' | 'no_relevant_videos' | 'api_error' | 'disabled';
+  message: string;
+  searchQuery?: string;
   alternativeVideos: EducationalVideo[];
 }> {
-  const pool = getDomainPool(topic);
-  const chLower = (chapterTitle || '').toLowerCase();
-
-  // Try YouTube Data API v3 if key is present
-  if (YOUTUBE_API_KEY && YOUTUBE_API_KEY.startsWith('AIzaSy')) {
-    try {
-      const cleanTopic = topic.replace(/^(introduction to|learn|basics of|course on)\s+/i, '').trim();
-      const searchTerms = `${cleanTopic} ${chapterTitle} tutorial in English -hindi -urdu -tamil -reaction -shorts -music`.trim();
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=8&type=video&videoEmbeddable=true&relevanceLanguage=en&q=${encodeURIComponent(searchTerms)}&key=${YOUTUBE_API_KEY}`;
-      const searchRes = await fetch(searchUrl);
-
-      if (searchRes.ok) {
-        const data = await searchRes.json();
-        const candidateItems = (data.items || []).filter((i: any) => i.id?.videoId);
-        const videoIds = candidateItems.map((i: any) => i.id.videoId).join(',');
-
-        if (videoIds) {
-          const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=${videoIds}&key=${YOUTUBE_API_KEY}`;
-          const detailsRes = await fetch(detailsUrl);
-
-          if (detailsRes.ok) {
-            const detailsData = await detailsRes.json();
-            const candidates: EducationalVideo[] = (detailsData.items || []).map((v: any) => {
-              const dur = parseISO8601Duration(v.contentDetails?.duration);
-              const scoreEval = computeRelevanceScore(
-                v.snippet?.title || '',
-                v.snippet?.description || '',
-                cleanTopic,
-                chapterTitle,
-                dur.minutes,
-                importantConcepts,
-                learningObjectives
-              );
-              return {
-                id: v.id,
-                title: v.snippet?.title || `${chapterTitle} Lecture`,
-                channel: v.snippet?.channelTitle || 'YouTube Educator',
-                duration: dur.formatted,
-                topic: chapterTitle,
-                relevanceScore: scoreEval.score,
-                matchReason: scoreEval.matchReason,
-                matchCategory: scoreEval.matchCategory,
-                embedUrl: `https://www.youtube.com/embed/${v.id}`,
-                thumbnailUrl: v.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${v.id}/mqdefault.jpg`,
-                isEmbeddable: v.status?.embeddable !== false,
-              };
-            });
-
-            const valid = candidates.filter(c => c.isEmbeddable && !usedVideoIds.has(c.id));
-            if (valid.length > 0) {
-              const primary = valid[0];
-              usedVideoIds.add(primary.id);
-              const alternatives = valid.slice(1, 4);
-              return {
-                id: primary.id,
-                title: primary.title,
-                channel: primary.channel,
-                duration: primary.duration,
-                relevanceScore: primary.relevanceScore,
-                matchReason: primary.matchReason || `Matches chapter "${chapterTitle}" in ${topic}.`,
-                matchCategory: primary.matchCategory || 'excellent',
-                alternativeVideos: alternatives,
-              };
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('[YouTube API Search Notice]:', err?.message);
-    }
-  }
-
-  // Domain-verified Fallback Strategy (Curated, guaranteed relevant & distinct)
-  let preferredIndex = dayIndex % pool.length;
-
-  if (chLower.includes('intro') || chLower.includes('setup') || chLower.includes('foundation') || chLower.includes('start') || dayIndex === 0) {
-    preferredIndex = 0;
-  } else if (chLower.includes('variable') || chLower.includes('type') || chLower.includes('syntax') || chLower.includes('constant') || dayIndex === 1) {
-    preferredIndex = 1 % pool.length;
-  } else if (chLower.includes('input') || chLower.includes('output') || chLower.includes('printf') || chLower.includes('scanf') || chLower.includes('console')) {
-    preferredIndex = 2 % pool.length;
-  } else if (chLower.includes('condition') || chLower.includes('if') || chLower.includes('switch') || chLower.includes('branch')) {
-    preferredIndex = 3 % pool.length;
-  } else if (chLower.includes('loop') || chLower.includes('iteration') || chLower.includes('while') || chLower.includes('for')) {
-    preferredIndex = 4 % pool.length;
-  } else if (chLower.includes('function') || chLower.includes('method') || chLower.includes('prototype') || chLower.includes('parameter')) {
-    preferredIndex = 5 % pool.length;
-  } else if (chLower.includes('array') || chLower.includes('vector') || chLower.includes('matrix')) {
-    preferredIndex = 6 % pool.length;
-  } else if (chLower.includes('string') || chLower.includes('char array') || chLower.includes('text')) {
-    preferredIndex = 7 % pool.length;
-  } else if (chLower.includes('pointer') || chLower.includes('address') || chLower.includes('reference') || chLower.includes('memory')) {
-    preferredIndex = 8 % pool.length;
-  } else if (chLower.includes('project') || chLower.includes('capstone') || chLower.includes('case study') || dayIndex >= 4) {
-    preferredIndex = (pool.length - 1);
-  }
-
-  // Select primary unused candidate
-  let primaryVideo = pool[preferredIndex];
-  if (!primaryVideo || usedVideoIds.has(primaryVideo.id)) {
-    const unused = pool.find(v => !usedVideoIds.has(v.id));
-    if (unused) {
-      primaryVideo = unused;
-    } else {
-      primaryVideo = pool[preferredIndex] || pool[0];
-    }
-  }
-
-  usedVideoIds.add(primaryVideo.id);
-
-  // Alternative videos from remaining pool items
-  const alternatives = pool.filter(v => v.id !== primaryVideo.id).slice(0, 3);
-
-  const evalResult = computeRelevanceScore(
-    primaryVideo.title,
-    primaryVideo.topic || '',
-    topic,
-    chapterTitle,
-    targetMinutes,
-    importantConcepts,
-    learningObjectives
+  const rec = await recommendVideosForChapter(
+    {
+      courseTopic: topic,
+      category,
+      chapterTitle,
+      importantConcepts,
+      learningObjectives,
+      difficulty,
+      suggestedSearchQuery,
+      targetMinutes,
+      limit: 4,
+    },
+    usedVideoIds,
+    { ai, youtubeApiKey: YOUTUBE_API_KEY }
   );
 
+  if (rec.primaryVideo) {
+    return {
+      id: rec.primaryVideo.id,
+      title: rec.primaryVideo.title,
+      channel: rec.primaryVideo.channel,
+      duration: rec.primaryVideo.duration,
+      relevanceScore: rec.primaryVideo.relevanceScore,
+      matchReason:
+        rec.primaryVideo.matchReason ||
+        `Verified match for "${chapterTitle}" in ${topic}.`,
+      matchCategory: rec.primaryVideo.matchCategory || 'excellent',
+      status: 'found',
+      message: rec.message,
+      searchQuery: rec.searchQueries[0],
+      alternativeVideos: rec.alternativeVideos,
+    };
+  }
+
   return {
-    id: primaryVideo.id,
-    title: primaryVideo.title,
-    channel: primaryVideo.channel,
-    duration: primaryVideo.duration,
-    relevanceScore: Math.max(primaryVideo.relevanceScore || 95, evalResult.score),
-    matchReason: primaryVideo.matchReason || evalResult.matchReason,
-    matchCategory: primaryVideo.matchCategory || evalResult.matchCategory,
-    alternativeVideos: alternatives,
+    id: '',
+    title: '',
+    channel: '',
+    relevanceScore: 0,
+    matchReason: '',
+    matchCategory: 'fair',
+    status: rec.status,
+    message: rec.message || NO_RELEVANT_VIDEOS_MESSAGE,
+    searchQuery: rec.searchQueries[0],
+    alternativeVideos: [],
   };
 }
 
@@ -1575,7 +1320,7 @@ async function searchYouTubeVideo(
   defaultTopic: string = 'education',
   index: number = 0,
   targetMinutes: number = 20,
-  totalChapters: number = 5
+  _totalChapters: number = 5
 ): Promise<{ id: string; title: string; channel: string }> {
   const dummySet = new Set<string>();
   const res = await assignTargetedEducationalVideo(defaultTopic, query, index, dummySet, targetMinutes);
@@ -2139,6 +1884,7 @@ app.post('/api/courses/generate', authenticateUser, async (req: Request, res: Re
     duration = '1 hour',
     noOfChapters = 5,
     addVideo = 'Yes',
+    language = 'English',
     pdfSources = [], // Array of { fileName, fileSize, summary }
   } = req.body;
 
@@ -2182,48 +1928,47 @@ app.post('/api/courses/generate', authenticateUser, async (req: Request, res: Re
     ? pdfSources.map((p: any) => `[PDF Document: ${p.fileName}] Content Summary: ${p.summary}`).join('\n')
     : '';
 
+  const isProgrammingSubject =
+    category.toLowerCase() === 'programming' ||
+    /\b(python|java|javascript|typescript|c\+\+|cpp|c programming|c language|sql|dbms|html|css|react|node|dsa|data structures|algorithms|coding|web development|software)\b/i.test(topic);
+
   let generatedCourseData: any = null;
 
-  if (ai) {
+  if (ai && !isGeminiModelOnCooldown('gemini-4-hydrogen')) {
     try {
-      const prompt = `You are an expert curriculum architect for "AI Course Generator".
+      const prompt = `You are an expert curriculum architect for "AlphaWave AI".
 Create a structured ${chapterDurationFormatted}-per-class course outline in JSON format for the topic: "${topic}".
-Category: "${category}". Target: ${chapterCount} chapters.
+Category: "${category}". Difficulty: "${difficulty}". Language: "${language}". Target: ${chapterCount} chapters.
 
 ${
   hasPDFs
     ? `CRITICAL MANDATORY INSTRUCTION ON PDF ATTACHMENTS:
 The user uploaded the following specific PDF documents:
 ${pdfDetails}
-You MUST evaluate the uploaded PDF topics and explain ONLY the topics, concepts, and syllabus presented in these PDF details! For instance, if the PDF is Module 1 of DBMS, focus exclusively on Module 1 (e.g. Relational Data Model, ER diagrams, keys) and DO NOT include later modules. Base the entire curriculum on the uploaded PDF.`
+You MUST evaluate the uploaded PDF topics and explain ONLY the topics, concepts, and syllabus presented in these PDF details! Base the entire curriculum on the uploaded PDF.`
     : ''
 }
 
 MANDATORY RULES:
 1. Every chapter MUST have duration "${chapterDurationFormatted}".
-2. Strict Concept Progression (Crucial for learning flow):
-   - Day 1 (Chapter 1): MUST be Introduction, Development Setup, and Core Architecture.
-   - Day 2 (Chapter 2): MUST be Variables, Fundamental Data Types, and Basic Syntax.
-   - Day 3 (Chapter 3): MUST be Data Handling, Collections (Lists, Dicts, Arrays), and Core Operations.
-   - Day 4 (Chapter 4): MUST be Functions, Control Flow, Logic, and Modular Methods.
-   - Day 5 (Chapter 5): MUST be Applied Capstone Project, Hands-On Real-World Application.
-3. Provide a distinct YouTube search query for each chapter matching its exact daily concept.
-4. Keep output concise and valid JSON.
+2. Design a logical, authentic progression specifically tailored to "${topic}" (${category}) — from foundational introduction, through distinct core pillars/sub-disciplines of "${topic}", to applied analytics or capstone implementation.
+3. For EVERY chapter, provide a distinct, chapter-specific "videoSearchQuery" combining "${topic}" and that specific chapter's core topic (never repeat the same generic query across chapters).
+4. ${isProgrammingSubject ? 'Include a relevant, accurate "codeSnippet" and "codeLanguage" for each chapter.' : 'Omit "codeSnippet" or keep it empty unless genuinely relevant to the topic.'}
+5. Keep output concise and valid JSON.
 
 Return JSON schema:
 {
-  "courseTitle": "${topic} Mastery",
+  "courseTitle": "${topic}",
   "description": "Comprehensive course on ${topic}",
   "chapters": [
     {
       "chapterNumber": 1,
-      "title": "Chapter title",
+      "title": "Chapter title specific to ${topic}",
       "description": "2-sentence chapter overview",
       "duration": "${chapterDurationFormatted}",
-      "videoSearchQuery": "${topic} chapter topic full tutorial",
+      "videoSearchQuery": "${topic} <specific chapter concept> tutorial",
       "subtopics": ["Subtopic 1", "Subtopic 2", "Subtopic 3"],
-      "codeSnippet": "code example with comments",
-      "codeLanguage": "sql",
+      ${isProgrammingSubject ? '"codeSnippet": "code example with comments",\n      "codeLanguage": "python",' : ''}
       "keyTakeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3", "Takeaway 4"]
     }
   ]
@@ -2231,12 +1976,11 @@ Return JSON schema:
 
       const aiResponse = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
-            maxOutputTokens: 2048,
-            temperature: 0.7,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           },
         }),
         20000 // Fast 20s timeout
@@ -2246,7 +1990,10 @@ Return JSON schema:
       if (parsed.chapters && Array.isArray(parsed.chapters) && parsed.chapters.length > 0) {
         generatedCourseData = parsed;
       }
-    } catch {
+    } catch (err: any) {
+      if (isGeminiQuotaError(err)) {
+        markGeminiModelCooldown('gemini-4-hydrogen', err);
+      }
       console.log('[AI Curriculum Engine] Applied domain-specific curriculum architecture.');
     }
   }
@@ -2256,33 +2003,34 @@ Return JSON schema:
   const finalChapters: CourseChapter[] = [];
   const rawChapters = generatedCourseData?.chapters || generateSmartChaptersFallback(topic, category, chapterCount, pdfSources, chapterDurationFormatted);
 
-  // Fetch real YouTube videos for each chapter with concept alignment and distinct video shifting
-  const usedVideoIds = new Set<string>();
-  const resolvedVideos: Array<{
-    id: string;
-    title: string;
-    channel: string;
-    relevanceScore: number;
-    matchReason?: string;
-    alternativeVideos?: EducationalVideo[];
-  }> = [];
+  // Course-to-Chapter Video Recommendation Pipeline:
+  // Course Topic -> Chapter -> Distinct Search Query -> YouTube Retrieval -> AI + Strict Verification -> Deduplicated Assignment
+  const chapterVideoInputs = rawChapters.slice(0, chapterCount).map((rawCh: any, i: number) => ({
+    title: rawCh.title || `Chapter ${i + 1}: ${topic}`,
+    description: rawCh.description,
+    subtopics: Array.isArray(rawCh.subtopics) ? rawCh.subtopics : [],
+    importantConcepts: Array.isArray(rawCh.subtopics) ? rawCh.subtopics : [rawCh.title || topic],
+    videoSearchQuery: rawCh.videoSearchQuery,
+  }));
+
+  const videoRecommendations = await recommendVideosForCourseChapters(
+    {
+      courseTopic: topic,
+      category,
+      difficulty,
+      language,
+      includeVideo,
+      targetMinutes,
+      chapters: chapterVideoInputs,
+    },
+    { ai, youtubeApiKey: YOUTUBE_API_KEY }
+  );
 
   for (let i = 0; i < chapterCount; i++) {
-    if (!includeVideo) {
-      resolvedVideos.push({ id: '', title: '', channel: '', relevanceScore: 95, alternativeVideos: [] });
-      continue;
-    }
     const rawCh = rawChapters[i] || {};
-    const chTitle = rawCh.title || `Day ${i + 1}: ${topic}`;
-    const v = await assignTargetedEducationalVideo(topic, chTitle, i, usedVideoIds, targetMinutes);
-    resolvedVideos.push(v);
-  }
-
-  for (let i = 0; i < chapterCount; i++) {
-    const rawCh = rawChapters[i] || {};
-    const videoMeta = resolvedVideos[i] || { id: '', title: '', channel: '', relevanceScore: 95, alternativeVideos: [] };
+    const videoRec = videoRecommendations[i];
     const chTitle = rawCh.title || `Lecture ${i + 1}: ${topic} In-Depth`;
-    const chDesc = rawCh.description || `In-depth ${chapterDurationFormatted} technical lecture covering ${chTitle}.`;
+    const chDesc = rawCh.description || `In-depth ${chapterDurationFormatted} lecture covering ${chTitle}.`;
 
     // Ensure content has card-by-card structure
     let contentObj = rawCh.content;
@@ -2292,14 +2040,14 @@ Return JSON schema:
           introduction: chDesc,
           sections: rawCh.subtopics.map((st: string, sIdx: number) => ({
             title: `${sIdx + 1}. ${st}`,
-            content: `In this section of the lecture, we examine the foundational mechanics, operational workflows, and practical applications of ${st}. Mastering this concept is essential for understanding ${chTitle}.`,
+            content: `In this section of the lecture, we examine the foundational mechanics, operational workflows, and practical applications of ${st} within ${topic}. Mastering this concept is essential for understanding ${chTitle}.`,
             codeSnippet: sIdx === 0 && rawCh.codeSnippet ? rawCh.codeSnippet : undefined,
-            codeLanguage: rawCh.codeLanguage || 'c',
+            codeLanguage: rawCh.codeLanguage || undefined,
           })),
           keyTakeaways: rawCh.keyTakeaways || [
-            `Master the core concepts and practical syntax of ${chTitle}.`,
-            'Enforce input validation and correct edge case handling at every step.',
-            'Follow clean code best practices with modular, readable functions.',
+            `Master the core concepts and practical execution of ${chTitle}.`,
+            'Apply structured analytical frameworks and verify measurable outcomes.',
+            'Document workflows clearly and follow industry best practices.',
             'Review notes and pass the 5-question lecture assessment to unlock the next session.',
           ],
         };
@@ -2319,23 +2067,21 @@ Return JSON schema:
       };
     }
 
-    finalChapters.push({
+    const baseChapter: CourseChapter = {
       id: `ch-${Date.now().toString(36)}-${i + 1}`,
       chapterNumber: i + 1,
       title: chTitle,
       description: chDesc,
       duration: chapterDurationFormatted,
-      videoId: includeVideo && videoMeta.id ? videoMeta.id : undefined,
-      videoTitle: videoMeta.title || chTitle,
-      videoChannel: videoMeta.channel || 'AlphaWave Educational Network',
-      relevanceScore: videoMeta.relevanceScore || 96,
-      videoMatchReason: videoMeta.matchReason,
-      alternativeVideos: videoMeta.alternativeVideos || [],
       completed: false,
       isUnlocked: i === 0, // ONLY Lecture 1 is unlocked initially!
       assessment: assessmentObj,
       content: contentObj,
-    });
+    };
+
+    finalChapters.push(
+      applyVideoRecommendationToChapter(baseChapter, videoRec, includeVideo)
+    );
   }
 
   // Thumbnail selection
@@ -2345,9 +2091,9 @@ Return JSON schema:
     thumbnail = '/src/assets/images/banner_sql_course_1794057965712.jpg';
   } else if (t.includes('c++') || t.includes('cpp')) {
     thumbnail = '/src/assets/images/banner_react_native_1794057966018.jpg';
-  } else if (t.includes('react') || t.includes('native') || t.includes('mobile')) {
+  } else if (t.includes('react') || t.includes('native') || t.includes('mobile') || t.includes('web')) {
     thumbnail = '/src/assets/images/banner_react_native_1794057966018.jpg';
-  } else if (t.includes('video') || t.includes('creative') || t.includes('ai')) {
+  } else if (t.includes('video') || t.includes('creative') || t.includes('ai') || t.includes('marketing') || t.includes('machine learning')) {
     thumbnail = '/src/assets/images/banner_ai_youtube_1794057967000.jpg';
   } else if (t.includes('fitness') || t.includes('health') || t.includes('gym')) {
     thumbnail = '/src/assets/images/banner_fitness_home_1794057966590.jpg';
@@ -3111,7 +2857,11 @@ function generateSmartChaptersFallback(
       assessment: generateDefaultAssessment(topic, title, idx + 1),
     }));
   } else {
-    // General / DBMS / Technical generator
+    const isDigitalMarketing = /\b(digital marketing|seo|social media marketing|email marketing|ppc|google ads|content marketing)\b/i.test(t);
+    const isML = /\b(machine learning|deep learning|neural network|supervised learning)\b/i.test(t);
+    const isWebDev = /\b(web development|html|css|javascript|react|frontend|full[- ]?stack)\b/i.test(t);
+    const isDSA = /\b(data structures|dsa|algorithms|linked list|sorting|binary tree)\b/i.test(t);
+
     const baseTitles = isDBMS
       ? [
           'Relational Architecture, Schemas & Integrity Constraints',
@@ -3120,17 +2870,51 @@ function generateSmartChaptersFallback(
           'Relational Joins, Aggregations & Query Execution Mechanisms',
           'Applied SQL Capstone Project & Real-World Database Case Study',
         ]
+      : isDigitalMarketing
+      ? [
+          'Introduction to Digital Marketing',
+          'Search Engine Optimization (SEO)',
+          'Social Media Marketing',
+          'Google Ads and PPC Advertising',
+          'Email Marketing',
+          'Content Marketing',
+          'Digital Marketing Analytics',
+        ]
+      : isML
+      ? [
+          'Introduction to Machine Learning',
+          'Supervised Learning: Linear Regression and Classification',
+          'Unsupervised Learning and Clustering',
+          'Neural Networks and Backpropagation',
+          'Model Evaluation, Overfitting and Regularization',
+        ]
+      : isWebDev
+      ? [
+          'HTML5 Semantics and Document Structure',
+          'CSS3 Layouts: Flexbox and Responsive Grid',
+          'JavaScript Fundamentals and DOM Manipulation',
+          'React Components, State and Hooks',
+          'Backend REST APIs with Node.js and Express',
+        ]
+      : isDSA
+      ? [
+          'Arrays, Strings and Big-O Time Complexity',
+          'Linked Lists, Stacks and Queues',
+          'Trees, Binary Search Trees and Heaps',
+          'Sorting and Searching Algorithms',
+          'Graph Traversal and Dynamic Programming',
+        ]
       : [
-          `${topic} Introduction, Environment Setup & Core Foundations`,
-          `${topic} Variables, Core Terminology & Fundamental Syntax`,
-          `${topic} Data Handling, Structural Models & Operations`,
-          `${topic} Functions, Control Logic & Advanced Execution`,
-          `${topic} Real-World Hands-On Implementation & Capstone Project`,
+          `Introduction to ${topic} & Core Foundations`,
+          `Core Principles and Frameworks of ${topic}`,
+          `Applied Techniques and Methodologies in ${topic}`,
+          `Optimization, Analysis and Best Practices in ${topic}`,
+          `Real-World Capstone Strategy & Implementation in ${topic}`,
         ];
 
     chapterDefinitions = baseTitles.map((title, idx) => ({
       title,
-      description: `Comprehensive technical lecture covering ${title}. Study the in-depth notes and solve the assessment questions.`,
+      description: `Comprehensive lecture covering ${title} in ${topic}. Study the structured notes and solve the assessment questions.`,
       content: generateDefaultLectureContent(topic, title, idx + 1),
       assessment: generateDefaultAssessment(topic, title, idx + 1),
     }));
@@ -3146,7 +2930,7 @@ function generateSmartChaptersFallback(
       duration: chapterDuration,
       content: def.content,
       assessment: def.assessment,
-      videoSearchQuery: `${topic} ${def.title} full lecture tutorial`,
+      videoSearchQuery: `${topic} ${def.title} tutorial`,
     });
   }
 
@@ -3867,126 +3651,126 @@ function generateDefaultLectureContent(topic: string = 'Computer Science', chapt
     };
   }
 
-  // General Domain-Specific / Technical Course Curriculum
+  // General Domain-Neutral Curriculum Generator (adapts cleanly to business, creative, science, or technical subjects)
   const lessonIdx = ((chapterNum - 1) % 5) + 1;
   const generalCurricula: Record<number, { title: string; intro: string; sections: any[]; takeaways: string[] }> = {
     1: {
-      title: `${topic} Introduction, Environment Setup & Core Foundations`,
-      intro: `Welcome to Lecture 1 of ${topic}: Getting Started & Core Architecture.\n\nIn this foundational session, we examine the environment setup, architectural mental models, and primary syntax or operational mechanics required for ${topic}.`,
+      title: `${chapterTitle}`,
+      intro: `Welcome to Lecture ${chapterNum} of ${topic}: ${chapterTitle}.\n\nIn this foundational session, we establish the core mental models, essential terminology, and strategic objectives behind ${chapterTitle}.`,
       sections: [
         {
-          title: `1. Foundations, Core Principles & Architecture of ${topic}`,
-          content: `Every discipline begins with its foundational mental model. In ${topic}, understanding how components interact and what tools form the runtime environment ensures a smooth progression into advanced techniques.\n\nSet up your workspace with the appropriate development tools, verify standard dependencies, and establish a clear file structure.`,
+          title: `1. Core Foundations of ${chapterTitle}`,
+          content: `Every discipline begins with clear foundational principles. Within ${topic}, ${chapterTitle} establishes the core concepts, workflows, and measurable benchmarks that guide effective practice.`,
         },
         {
-          title: `2. Syntax, First Principles & Hello World Implementation`,
-          content: `Write and verify your initial implementation. Focus on clear variable declarations, proper syntax formatting, and understanding how the system parses and runs commands.`,
+          title: `2. Key Frameworks & Practical Application`,
+          content: `Examine step-by-step how practitioners apply ${chapterTitle} in real scenarios. Focus on structured execution, audience or system requirements, and verifiable outcomes.`,
         },
         {
-          title: `3. Best Practices & Avoiding Early Misconceptions`,
-          content: `Common beginner mistakes stem from skipping foundational validation. Learn standard naming conventions, follow established folder layouts, and verify runtime output at every step.`,
+          title: `3. Best Practices & Avoiding Common Pitfalls`,
+          content: `Many early mistakes stem from skipping baseline research or validation. Follow disciplined verification checklists and industry-standard guidelines throughout your work.`,
         },
       ],
       takeaways: [
-        `Understand the foundational principles and mental model of ${topic}.`,
-        'Configure the development environment and verify initial execution.',
-        'Follow standard naming and structural conventions from day one.',
+        `Understand the foundational principles and scope of ${chapterTitle} in ${topic}.`,
+        'Apply structured frameworks before moving into execution.',
+        'Measure results against clear qualitative and quantitative benchmarks.',
         'Complete the 5-question assessment to unlock the next session.',
       ],
     },
     2: {
-      title: `${topic} Core Concepts, Data Models & Architecture Flow`,
-      intro: `Welcome to Lecture 2 of ${topic}: Data Structures, Flow & Program Logic.\n\nBuilding upon initial setup, we explore data modeling, control flow, and operational state transitions.`,
+      title: `${chapterTitle}`,
+      intro: `Welcome to Lecture ${chapterNum} of ${topic}: ${chapterTitle}.\n\nBuilding upon prior foundations, this lecture explores the core mechanisms, structured workflows, and tactical execution of ${chapterTitle}.`,
       sections: [
         {
-          title: `1. Data Modeling & State Invariants`,
-          content: `Data structures dictate how effectively an application processes information. In this section, we study how to represent domain entities cleanly with strict validation invariants.`,
+          title: `1. Structural Components of ${chapterTitle}`,
+          content: `Break down ${chapterTitle} into its primary building blocks and understand how each component contributes to success within ${topic}.`,
         },
         {
-          title: `2. Control Logic, Transformations & Pipeline Execution`,
-          content: `Explore procedural logic, conditional branching, and looping constructs. Ensure that data flows smoothly from input through transformation to final state.`,
+          title: `2. Step-by-Step Execution Workflow`,
+          content: `Walk through an end-to-end operational pipeline for ${chapterTitle}, highlighting inputs, decision criteria, and practical trade-offs.`,
         },
         {
-          title: `3. Boundary Conditions & Defensive Validation`,
-          content: `Defensive programming catches malformed inputs before they propagate through the system. Enforce boundary checks on every critical pathway.`,
+          title: `3. Quality Assurance & Validation`,
+          content: `Verify outputs systematically against domain standards to catch gaps early and improve reliability.`,
         },
       ],
       takeaways: [
-        `Master the core data structures and state models in ${topic}.`,
-        'Enforce boundary validation to prevent silent data corruption.',
-        'Structure operational logic with single-responsibility procedures.',
+        `Master the core components and workflow of ${chapterTitle}.`,
+        'Validate assumptions using empirical feedback and real-world metrics.',
+        'Maintain consistency across interconnected stages of the process.',
         'Pass the 5-question lecture assessment to unlock the next session.',
       ],
     },
     3: {
-      title: `${topic} Advanced Methods, Functional Components & Execution`,
-      intro: `Welcome to Lecture 3 of ${topic}: Modular Architecture & Practical Execution.\n\nIn this lecture, we examine component composition, reusable functions, and decoupling dependencies.`,
+      title: `${chapterTitle}`,
+      intro: `Welcome to Lecture ${chapterNum} of ${topic}: ${chapterTitle}.\n\nIn this session, we examine applied methodologies, modular strategy, and practical execution techniques for ${chapterTitle}.`,
       sections: [
         {
-          title: `1. Modular Decomposition & Interface Contracts`,
-          content: `Large systems become unmaintainable without modularity. Break monolithic processes into focused, decoupled modules that communicate through clear interfaces.`,
+          title: `1. Applied Strategy & Modular Planning`,
+          content: `Complex initiatives succeed when broken into focused, measurable deliverables. Design clear workflows for ${chapterTitle} that scale cleanly.`,
         },
         {
-          title: `2. Asynchronous Flow & Resource Lifecycles`,
-          content: `Manage system resources—network sockets, database handles, and files—responsibly by adhering to structured acquire-use-release lifecycles.`,
+          title: `2. Resource Allocation & Operational Lifecycle`,
+          content: `Coordinate tools, timelines, and stakeholder or system dependencies responsibly to maximize efficiency.`,
         },
         {
-          title: `3. Common Edge Cases & Defensive Patterns`,
-          content: `Identify performance bottlenecks and edge conditions such as race conditions, timeout failures, and empty collection boundaries.`,
+          title: `3. Edge Cases & Risk Mitigation`,
+          content: `Anticipate common bottlenecks, shifting constraints, and edge conditions before they disrupt delivery.`,
         },
       ],
       takeaways: [
-        'Decompose complex problems into small, independently testable modules.',
-        'Manage resource lifecycles explicitly to avoid memory or descriptor leaks.',
-        'Anticipate edge cases and handle asynchronous timing gracefully.',
-        'Pass the 5-question assessment to proceed to advanced optimization.',
+        `Decompose ${chapterTitle} into independently verifiable milestones.`,
+        'Optimize resource usage across the full operational lifecycle.',
+        'Anticipate edge cases and prepare structured mitigation steps.',
+        'Pass the 5-question assessment to proceed to the next module.',
       ],
     },
     4: {
-      title: `${topic} Error Handling, Performance Optimization & Edge Cases`,
-      intro: `Welcome to Lecture 4 of ${topic}: Error Handling, Security & Optimization.\n\nProduction-grade systems must remain resilient under adverse network conditions, unexpected inputs, and peak computational loads.`,
+      title: `${chapterTitle}`,
+      intro: `Welcome to Lecture ${chapterNum} of ${topic}: ${chapterTitle}.\n\nEffective execution in ${topic} requires continuous measurement, optimization, and resilience under changing real-world conditions.`,
       sections: [
         {
-          title: `1. Comprehensive Error Handling & Fault Isolation`,
-          content: `Implement robust error handling that distinguishes between recoverable transient faults and fatal system errors. Prevent cascade failures with circuit breakers and fallback defaults.`,
+          title: `1. Diagnostics & Bottleneck Isolation`,
+          content: `Learn how to identify root causes rather than symptoms when performance or quality drops in ${chapterTitle}.`,
         },
         {
-          title: `2. Performance Profiling & Algorithmic Optimization`,
-          content: `Measure before optimizing. Use profiling tools to locate hot loops and cache misses, replacing inefficient algorithms with optimal time-complexity solutions.`,
+          title: `2. Performance Measurement & Optimization`,
+          content: `Measure baseline metrics before tuning parameters. Focus optimization efforts on the highest-leverage factors.`,
         },
         {
-          title: `3. Security Hardening & Input Sanitization`,
-          content: `Sanitize all inputs from external untrusted boundaries. Adhere to the principle of least privilege across all system interfaces.`,
+          title: `3. Governance, Compliance & Standards`,
+          content: `Adhere to established ethical, operational, and quality standards across every stage of ${topic}.`,
         },
       ],
       takeaways: [
-        'Differentiate between transient recoverable errors and unrecoverable failures.',
-        'Profile systems before optimizing to target verified performance bottlenecks.',
-        'Sanitize external inputs to guard against injection and corrupted state.',
-        'Complete the 5-question assessment to unlock the final capstone project.',
+        'Differentiate between surface symptoms and root-cause bottlenecks.',
+        'Measure baseline performance before iterating on optimizations.',
+        'Follow domain compliance and quality standards consistently.',
+        'Complete the 5-question assessment to unlock the final capstone.',
       ],
     },
     5: {
-      title: `${topic} Real-World Hands-On Implementation & Capstone Project`,
-      intro: `Welcome to Lecture 5 of ${topic}: Capstone Implementation & Synthesis.\n\nIn this final capstone session, we integrate all prior concepts into an end-to-end, real-world practical project.`,
+      title: `${chapterTitle}`,
+      intro: `Welcome to Lecture ${chapterNum} of ${topic}: ${chapterTitle}.\n\nIn this capstone session, we synthesize all prior concepts into a unified, real-world implementation within ${topic}.`,
       sections: [
         {
-          title: `1. Capstone Project Architecture & Specification`,
-          content: `Synthesize data modeling, modular functions, error handling, and performance optimization into an end-to-end software application or case study.`,
+          title: `1. Capstone Architecture & Specification`,
+          content: `Combine core strategy, tactical workflows, analytics, and optimization into a complete end-to-end blueprint for ${chapterTitle}.`,
         },
         {
           title: `2. Step-by-Step Implementation & Integration`,
-          content: `Follow a disciplined implementation schedule: establish the data pipeline, implement business logic, bind user or API interfaces, and verify system integration.`,
+          content: `Follow a disciplined execution sequence: define goals, execute core deliverables, integrate feedback loops, and validate outcomes.`,
         },
         {
-          title: `3. Automated Verification, Deployment & Next Steps`,
-          content: `Write automated tests to verify specifications and set up continuous integration. Review key takeaways to prepare for practical certification or deployment.`,
+          title: `3. Evaluation, Iteration & Next Steps`,
+          content: `Review key performance indicators and refine your implementation continuously for sustained real-world impact.`,
         },
       ],
       takeaways: [
-        `Integrate all foundational and advanced concepts of ${topic} into a unified project.`,
-        'Verify end-to-end workflows with automated testing suites.',
-        'Follow production deployment guidelines and maintain code documentation.',
+        `Integrate foundational and advanced concepts of ${topic} into a unified plan.`,
+        'Validate end-to-end workflows against clear real-world success criteria.',
+        'Document insights and iterate based on empirical results.',
         'Score 75% or higher on the comprehensive assessment to master the curriculum.',
       ],
     },
@@ -5742,18 +5526,38 @@ app.post('/api/courses/:id/chapters', authenticateUser, async (req: Request, res
   const chDesc = description.trim() || `In-depth technical lecture and notes covering ${chTitle}.`;
 
   const usedVideoIds = new Set(course.chapters.map(c => c.videoId).filter(Boolean) as string[]);
-  const videoMeta = await assignTargetedEducationalVideo(
-    course.title,
-    chTitle,
-    newChapterNum - 1,
-    usedVideoIds,
-    25,
-    [chTitle],
-    [`Master ${chTitle}`]
-  );
+  const videoRec = course.includeVideo
+    ? await recommendVideosForChapter(
+        {
+          courseTopic: course.title,
+          category: course.category || 'Education',
+          chapterTitle: chTitle,
+          chapterDescription: chDesc,
+          importantConcepts: [chTitle],
+          learningObjectives: [`Master ${chTitle}`],
+          difficulty: course.difficulty || 'Beginner',
+          targetMinutes: 25,
+          limit: 4,
+        },
+        usedVideoIds,
+        { ai, youtubeApiKey: YOUTUBE_API_KEY }
+      )
+    : {
+        courseTopic: course.title,
+        category: course.category || 'Education',
+        chapterTitle: chTitle,
+        searchQueries: [],
+        primaryVideo: null,
+        alternativeVideos: [],
+        approvedVideos: [],
+        rejectedVideos: [],
+        status: 'disabled' as const,
+        message: 'Video recommendations disabled for this course.',
+        threshold: DEFAULT_RELEVANCE_THRESHOLD,
+      };
 
   let contentObj: any = null;
-  if (ai) {
+  if (ai && !isGeminiModelOnCooldown('gemini-4-hydrogen')) {
     try {
       const p = `Generate a structured lecture in JSON for:
 Course: "${course.title}" (${course.category}, ${course.difficulty})
@@ -5763,7 +5567,7 @@ JSON schema:
 {
   "introduction": "2-paragraph introduction",
   "definitions": [{"term": "Key Concept", "definition": "Clear explanation"}],
-  "sections": [{"title": "1. Key Section", "content": "Detailed explanation", "codeSnippet": "code", "codeLanguage": "c"}],
+  "sections": [{"title": "1. Key Section", "content": "Detailed explanation"}],
   "keyTakeaways": ["point 1", "point 2", "point 3", "point 4"],
   "realWorldApplications": ["app 1", "app 2"],
   "commonMistakes": ["mistake 1", "mistake 2"],
@@ -5771,14 +5575,20 @@ JSON schema:
 }`;
       const aiRes = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: p,
-          config: { responseMimeType: 'application/json' },
+          config: {
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          },
         }),
         10000
       );
       contentObj = JSON.parse(aiRes.text || '{}');
-    } catch {
+    } catch (err: any) {
+      if (isGeminiQuotaError(err)) {
+        markGeminiModelCooldown('gemini-4-hydrogen', err);
+      }
       contentObj = null;
     }
   }
@@ -5789,23 +5599,21 @@ JSON schema:
 
   const assessmentObj = generateDefaultAssessment(course.title, chTitle, newChapterNum);
 
-  const newChapter: CourseChapter = {
-    id: `ch-${Date.now().toString(36)}-${newChapterNum}`,
-    chapterNumber: newChapterNum,
-    title: chTitle,
-    description: chDesc,
-    duration: '25 minutes',
-    videoId: course.includeVideo ? videoMeta.id : undefined,
-    videoTitle: videoMeta.title,
-    videoChannel: videoMeta.channel,
-    relevanceScore: videoMeta.relevanceScore,
-    videoMatchReason: videoMeta.matchReason,
-    alternativeVideos: videoMeta.alternativeVideos || [],
-    completed: false,
-    isUnlocked: course.chapters.length === 0,
-    assessment: assessmentObj,
-    content: contentObj,
-  };
+  const newChapter: CourseChapter = applyVideoRecommendationToChapter(
+    {
+      id: `ch-${Date.now().toString(36)}-${newChapterNum}`,
+      chapterNumber: newChapterNum,
+      title: chTitle,
+      description: chDesc,
+      duration: '25 minutes',
+      completed: false,
+      isUnlocked: course.chapters.length === 0,
+      assessment: assessmentObj,
+      content: contentObj,
+    },
+    videoRec,
+    course.includeVideo
+  );
 
   course.chapters.push(newChapter);
   course.noOfChapters = course.chapters.length;
@@ -5879,16 +5687,36 @@ app.post('/api/courses/:id/chapters/:chapterId/regenerate', authenticateUser, as
     course.chapters.filter((_, idx) => idx !== chIndex).map(c => c.videoId).filter(Boolean) as string[]
   );
 
-  const videoMeta = await assignTargetedEducationalVideo(
-    course.title,
-    currentCh.title,
-    chIndex,
-    usedVideoIds,
-    25
-  );
+  const videoRec = course.includeVideo
+    ? await recommendVideosForChapter(
+        {
+          courseTopic: course.title,
+          category: course.category || 'Education',
+          chapterTitle: currentCh.title,
+          chapterDescription: currentCh.description,
+          difficulty: course.difficulty || 'Beginner',
+          targetMinutes: 25,
+          limit: 4,
+        },
+        usedVideoIds,
+        { ai, youtubeApiKey: YOUTUBE_API_KEY }
+      )
+    : {
+        courseTopic: course.title,
+        category: course.category || 'Education',
+        chapterTitle: currentCh.title,
+        searchQueries: [],
+        primaryVideo: null,
+        alternativeVideos: [],
+        approvedVideos: [],
+        rejectedVideos: [],
+        status: 'disabled' as const,
+        message: 'Video recommendations disabled for this course.',
+        threshold: DEFAULT_RELEVANCE_THRESHOLD,
+      };
 
   let contentObj: any = null;
-  if (ai) {
+  if (ai && !isGeminiModelOnCooldown('gemini-4-hydrogen')) {
     try {
       const p = `Regenerate and expand an in-depth educational lesson in JSON for:
 Course: "${course.title}" (${course.category}, ${course.difficulty})
@@ -5898,7 +5726,7 @@ JSON schema:
 {
   "introduction": "2-paragraph introduction",
   "definitions": [{"term": "Key Concept", "definition": "Clear explanation"}],
-  "sections": [{"title": "1. Key Section", "content": "Detailed explanation", "codeSnippet": "code", "codeLanguage": "c"}],
+  "sections": [{"title": "1. Key Section", "content": "Detailed explanation"}],
   "keyTakeaways": ["point 1", "point 2", "point 3", "point 4"],
   "realWorldApplications": ["app 1", "app 2"],
   "commonMistakes": ["mistake 1", "mistake 2"],
@@ -5906,14 +5734,20 @@ JSON schema:
 }`;
       const aiRes = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: p,
-          config: { responseMimeType: 'application/json' },
+          config: {
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          },
         }),
         10000
       );
       contentObj = JSON.parse(aiRes.text || '{}');
-    } catch {
+    } catch (err: any) {
+      if (isGeminiQuotaError(err)) {
+        markGeminiModelCooldown('gemini-4-hydrogen', err);
+      }
       contentObj = null;
     }
   }
@@ -5924,17 +5758,15 @@ JSON schema:
 
   const assessmentObj = generateDefaultAssessment(course.title, currentCh.title, currentCh.chapterNumber);
 
-  course.chapters[chIndex] = {
-    ...currentCh,
-    content: contentObj,
-    assessment: assessmentObj,
-    videoId: course.includeVideo ? videoMeta.id : undefined,
-    videoTitle: videoMeta.title,
-    videoChannel: videoMeta.channel,
-    relevanceScore: videoMeta.relevanceScore,
-    videoMatchReason: videoMeta.matchReason,
-    alternativeVideos: videoMeta.alternativeVideos || [],
-  };
+  course.chapters[chIndex] = applyVideoRecommendationToChapter(
+    {
+      ...currentCh,
+      content: contentObj,
+      assessment: assessmentObj,
+    },
+    videoRec,
+    course.includeVideo
+  );
 
   updateCourseInDB(course.id, { chapters: course.chapters });
   return res.json({ success: true, chapter: course.chapters[chIndex], course });
@@ -6148,7 +5980,7 @@ async function evaluateWrittenAnswerWithGemini(
     };
   }
 
-  if (ai) {
+  if (ai && !isGeminiModelOnCooldown('gemini-4-hydrogen')) {
     try {
       const parts: any[] = [];
 
@@ -6201,10 +6033,11 @@ Return strictly valid JSON:
 
       const aiResponse = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: { parts },
           config: {
             responseMimeType: 'application/json',
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           },
         }),
         35000
@@ -6221,7 +6054,11 @@ Return strictly valid JSON:
         };
       }
     } catch (err: any) {
-      console.warn(`[Gemini Assessment Evaluator] Multimodal call notice:`, err.message);
+      if (isGeminiQuotaError(err)) {
+        markGeminiModelCooldown('gemini-4-hydrogen', err);
+      } else {
+        console.info(`[Gemini Assessment Evaluator] Using rubric engine:`, err?.message?.slice(0, 140));
+      }
     }
   }
 
@@ -6450,25 +6287,65 @@ app.get('/api/download-zip', (_req: Request, res: Response) => {
 // GET /api/videos/search
 app.get('/api/videos/search', async (req: Request, res: Response) => {
   try {
-    const query = (req.query.q as string) || (req.query.query as string) || 'Computer Science Tutorial';
-    const topic = (req.query.topic as string) || query;
-    const chapterTitle = (req.query.chapterTitle as string) || '';
+    const query = ((req.query.q as string) || (req.query.query as string) || '').trim();
+    const topic = ((req.query.topic as string) || query).trim();
+    const chapterTitle = ((req.query.chapterTitle as string) || (req.query.chapter as string) || topic).trim();
     const difficulty = (req.query.difficulty as string) || 'Beginner';
     const category = (req.query.category as string) || 'Education';
+    const language = (req.query.language as string) || 'English';
     const limit = Math.min(10, Math.max(1, parseInt(req.query.limit as string, 10) || 4));
+    const thresholdParam = parseInt(req.query.threshold as string, 10);
+    const threshold =
+      Number.isFinite(thresholdParam) && thresholdParam >= 50 && thresholdParam <= 100
+        ? thresholdParam
+        : DEFAULT_RELEVANCE_THRESHOLD;
 
-    const videos = await searchEducationalVideos(topic, chapterTitle, difficulty, category, limit);
+    if (!topic) {
+      return res.status(400).json({
+        success: false,
+        error: 'A course topic or search query (?topic=... or ?q=...) is required.',
+      });
+    }
+
+    const result = await recommendVideosForChapter(
+      {
+        courseTopic: topic,
+        category,
+        chapterTitle,
+        difficulty,
+        language,
+        suggestedSearchQuery: query && query !== topic ? query : undefined,
+        limit,
+        threshold,
+      },
+      new Set(),
+      { ai, youtubeApiKey: YOUTUBE_API_KEY }
+    );
+
     return res.json({
-      success: true,
-      query,
+      success: result.status === 'found',
+      status: result.status,
+      message: result.message,
+      threshold: result.threshold,
+      query: result.searchQueries[0] || query || topic,
+      searchQueries: result.searchQueries,
       topic,
       chapterTitle,
-      count: videos.length,
-      videos,
+      count: result.approvedVideos.length,
+      recommendedVideo: result.primaryVideo,
+      alternativeVideos: result.alternativeVideos,
+      videos: result.approvedVideos,
+      rejectedVideos: result.rejectedVideos,
     });
   } catch (err: any) {
     console.error('[Video Search Error]:', err);
-    return res.status(500).json({ error: 'Failed to search educational videos', details: err?.message });
+    return res.status(500).json({
+      success: false,
+      status: 'api_error',
+      message: NO_RELEVANT_VIDEOS_MESSAGE,
+      error: 'Failed to search educational videos',
+      details: err?.message,
+    });
   }
 });
 
@@ -6476,18 +6353,135 @@ app.get('/api/videos/search', async (req: Request, res: Response) => {
 app.get('/api/videos/chapter/:chapterId', async (req: Request, res: Response) => {
   try {
     const { chapterId } = req.params;
-    const title = (req.query.title as string) || 'Chapter Lecture';
-    const topic = (req.query.topic as string) || 'Programming';
+    const title = ((req.query.title as string) || (req.query.chapterTitle as string) || '').trim();
+    const topic = ((req.query.topic as string) || '').trim();
+    const category = (req.query.category as string) || 'Education';
+    const difficulty = (req.query.difficulty as string) || 'Beginner';
 
-    const videos = await searchEducationalVideos(topic, title, 'Beginner', 'Education', 3);
+    if (!topic || !title) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both topic and title query parameters are required for chapter video verification.',
+      });
+    }
+
+    const result = await recommendVideosForChapter(
+      {
+        courseTopic: topic,
+        category,
+        chapterTitle: title,
+        difficulty,
+        limit: 4,
+      },
+      new Set(),
+      { ai, youtubeApiKey: YOUTUBE_API_KEY }
+    );
+
     return res.json({
-      success: true,
+      success: result.status === 'found',
       chapterId,
-      recommendedVideo: videos[0] || null,
-      alternativeVideos: videos.slice(1),
+      status: result.status,
+      message: result.message,
+      threshold: result.threshold,
+      searchQueries: result.searchQueries,
+      recommendedVideo: result.primaryVideo,
+      alternativeVideos: result.alternativeVideos,
+      rejectedVideos: result.rejectedVideos,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve chapter videos' });
+    return res.status(500).json({
+      success: false,
+      status: 'api_error',
+      message: NO_RELEVANT_VIDEOS_MESSAGE,
+      error: 'Failed to retrieve chapter videos',
+    });
+  }
+});
+
+// POST /api/videos/evaluate - Structured AI + Deterministic Video Relevance Verification
+app.post('/api/videos/evaluate', async (req: Request, res: Response) => {
+  try {
+    const {
+      courseTopic = '',
+      category = 'Education',
+      chapter = '',
+      chapterTitle = '',
+      videoTitle = '',
+      videoDescription = '',
+      channel = '',
+      duration = '15:00',
+      videoId = 'evalCandidate1',
+      threshold = DEFAULT_RELEVANCE_THRESHOLD,
+    } = req.body || {};
+
+    const resolvedChapter = (chapter || chapterTitle || '').trim();
+    if (!courseTopic.trim() || !resolvedChapter || !videoTitle.trim()) {
+      return res.status(400).json({
+        error: 'courseTopic, chapter, and videoTitle are required for relevance evaluation.',
+      });
+    }
+
+    const effectiveThreshold =
+      typeof threshold === 'number' && threshold >= 50 && threshold <= 100
+        ? Math.round(threshold)
+        : DEFAULT_RELEVANCE_THRESHOLD;
+
+    const candidate = {
+      id: /^[a-zA-Z0-9_-]{11}$/.test(String(videoId)) ? String(videoId) : 'evalCand001',
+      title: String(videoTitle).trim(),
+      description: String(videoDescription || '').trim(),
+      channel: String(channel || 'Educational Channel').trim(),
+      duration: String(duration || '15:00'),
+      durationMinutes: 15,
+      embedUrl: `https://www.youtube.com/embed/${videoId}`,
+      thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+      isEmbeddable: true,
+      source: 'injected' as const,
+    };
+
+    const detEval = evaluateVideoRelevanceDeterministic(
+      candidate,
+      { courseTopic: courseTopic.trim(), category, chapterTitle: resolvedChapter },
+      effectiveThreshold
+    );
+
+    let evaluation: VideoRelevanceEvaluation = {
+      isRelevant: detEval.isRelevant && !detEval.hasConflict && detEval.relevanceScore >= effectiveThreshold,
+      courseTopic: detEval.courseTopic,
+      chapter: detEval.chapter,
+      videoTitle: detEval.videoTitle,
+      relevanceScore: detEval.relevanceScore,
+      reason: detEval.reason,
+    };
+
+    if (ai && !detEval.hasConflict && detEval.ceilingScore >= effectiveThreshold) {
+      const geminiMap = await evaluateVideosWithGemini(ai, [candidate], {
+        courseTopic: courseTopic.trim(),
+        category,
+        chapterTitle: resolvedChapter,
+      });
+      const aiEval = geminiMap.get(candidate.id);
+      if (aiEval) {
+        const finalScore = detEval.hasConflict
+          ? Math.min(aiEval.relevanceScore, detEval.ceilingScore)
+          : detEval.ceilingScore < effectiveThreshold
+          ? Math.min(aiEval.relevanceScore, detEval.ceilingScore)
+          : aiEval.relevanceScore;
+        evaluation = {
+          isRelevant: aiEval.isRelevant && !detEval.hasConflict && finalScore >= effectiveThreshold,
+          courseTopic: courseTopic.trim(),
+          chapter: resolvedChapter,
+          videoTitle: candidate.title,
+          relevanceScore: finalScore,
+          reason: detEval.hasConflict ? detEval.reason : aiEval.reason,
+        };
+      }
+    }
+
+    return res.json(evaluation);
+  } catch (err: any) {
+    console.error('[Video Evaluate Error]:', err);
+    return res.status(500).json({ error: 'Failed to evaluate video relevance', details: err?.message });
   }
 });
 
@@ -6764,7 +6758,7 @@ app.post('/api/pdf/:documentId/analyze', authenticateUser, async (req: Request, 
   try {
     let structuredAnalysis: any = null;
 
-    if (ai && doc.extractedText && doc.extractedText.length > 50) {
+    if (ai && !isGeminiModelOnCooldown('gemini-4-hydrogen') && doc.extractedText && doc.extractedText.length > 50) {
       try {
         const prompt = `You are an expert academic curriculum designer and senior computer scientist.
 Analyze this technical document and extract an exhaustive, rigorous educational breakdown in JSON format.
@@ -6815,12 +6809,11 @@ MANDATORY JSON RESPONSE FORMAT:
 
         const aiResponse = await withTimeout(
           ai.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-4-hydrogen',
             contents: prompt,
             config: {
               responseMimeType: 'application/json',
-              maxOutputTokens: 3000,
-              temperature: 0.5,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             },
           }),
           25000
@@ -6828,7 +6821,11 @@ MANDATORY JSON RESPONSE FORMAT:
 
         structuredAnalysis = JSON.parse(aiResponse.text || '{}');
       } catch (geminiErr: any) {
-        console.warn('[Gemini PDF Analysis Fallback]:', geminiErr?.message);
+        if (isGeminiQuotaError(geminiErr)) {
+          markGeminiModelCooldown('gemini-4-hydrogen', geminiErr);
+        } else {
+          console.info('[Gemini PDF Analysis Fallback]:', geminiErr?.message?.slice(0, 140));
+        }
       }
     }
 
@@ -6838,39 +6835,40 @@ MANDATORY JSON RESPONSE FORMAT:
 
     updatePDFDocument(documentId, { processingStatus: 'searching_videos' });
 
-    // Step 4: Video recommendation matching (Module 2 & 3)
+    // Step 4: Topic & Chapter-Specific Video Recommendation Pipeline (Deduplicated, >= 80 relevance)
     const primaryTopic = structuredAnalysis.mainTopics?.[0] || doc.fileName.replace(/\.[^/.]+$/, '');
     const recommendedVideosList: EducationalVideo[] = [];
 
-    // Search videos for each chapter in the PDF structure
     const chapters = structuredAnalysis.chapterStructure || [];
-    for (const ch of chapters) {
-      const vids = await searchEducationalVideos(
-        primaryTopic,
-        ch.title,
-        structuredAnalysis.difficultyLevel || 'Intermediate',
-        'Education',
-        2
-      );
-      if (vids.length > 0) {
-        ch.recommendedVideo = vids[0];
-        vids.forEach(v => {
-          if (!recommendedVideosList.some(rv => rv.id === v.id)) {
-            recommendedVideosList.push(v);
-          }
-        });
-      }
-    }
+    const chapterRecs = await recommendVideosForCourseChapters(
+      {
+        courseTopic: primaryTopic,
+        category: 'Education',
+        difficulty: structuredAnalysis.difficultyLevel || 'Intermediate',
+        language: 'English',
+        includeVideo: true,
+        chapters: chapters.map((ch: any) => ({
+          title: ch.title,
+          description: ch.description,
+          importantConcepts: Array.isArray(ch.keyPoints) ? ch.keyPoints : [ch.title],
+        })),
+      },
+      { ai, youtubeApiKey: YOUTUBE_API_KEY }
+    );
 
-    // If still need more recommended videos, pull from primary topic
-    if (recommendedVideosList.length < 3) {
-      const moreVids = await searchEducationalVideos(primaryTopic, '', structuredAnalysis.difficultyLevel || 'Intermediate', 'Education', 4);
-      moreVids.forEach(v => {
+    chapters.forEach((ch: any, idx: number) => {
+      const rec = chapterRecs[idx];
+      if (rec?.primaryVideo) {
+        ch.recommendedVideo = rec.primaryVideo;
+      } else {
+        ch.recommendedVideo = undefined;
+      }
+      for (const v of rec?.approvedVideos || []) {
         if (!recommendedVideosList.some(rv => rv.id === v.id)) {
           recommendedVideosList.push(v);
         }
-      });
-    }
+      }
+    });
 
     // Finalize document record
     const updatedDoc = updatePDFDocument(documentId, {
@@ -7019,13 +7017,42 @@ app.post('/api/pdf/:documentId/create-course', authenticateUser, async (req: Req
 
   for (let i = 0; i < doc.chapterStructure.length; i++) {
     const ch = doc.chapterStructure[i];
-    const recVideo = ch.recommendedVideo && !usedVideoIds.has(ch.recommendedVideo.id)
-      ? (() => { usedVideoIds.add(ch.recommendedVideo.id); return ch.recommendedVideo; })()
-      : await assignTargetedEducationalVideo(topicName, ch.title, i, usedVideoIds, 25);
+    let recVideo: EducationalVideo | null = null;
+    let altVideos: EducationalVideo[] = [];
+    let videoStatus: CourseChapter['videoStatus'] = 'no_relevant_videos';
+    let videoMessage: string | undefined = NO_RELEVANT_VIDEOS_MESSAGE;
+    let videoSearchQuery: string | undefined;
+
+    if (ch.recommendedVideo && ch.recommendedVideo.id && !usedVideoIds.has(ch.recommendedVideo.id)) {
+      usedVideoIds.add(ch.recommendedVideo.id);
+      recVideo = ch.recommendedVideo;
+      videoStatus = 'found';
+      videoMessage = undefined;
+    } else {
+      const rec = await recommendVideosForChapter(
+        {
+          courseTopic: topicName,
+          category: 'Education',
+          chapterTitle: ch.title,
+          chapterDescription: ch.description,
+          importantConcepts: Array.isArray(ch.keyPoints) ? ch.keyPoints : [ch.title],
+          difficulty: doc.difficultyLevel || 'Intermediate',
+          targetMinutes: 25,
+          limit: 4,
+        },
+        usedVideoIds,
+        { ai, youtubeApiKey: YOUTUBE_API_KEY }
+      );
+      recVideo = rec.primaryVideo;
+      altVideos = rec.alternativeVideos;
+      videoStatus = rec.status;
+      videoMessage = rec.primaryVideo ? undefined : rec.message || NO_RELEVANT_VIDEOS_MESSAGE;
+      videoSearchQuery = rec.searchQueries[0];
+    }
 
     const contentSections: ContentSection[] = (ch.keyPoints || []).map((kp, kpIdx) => ({
       title: `${kpIdx + 1}. ${kp}`,
-      content: `This section addresses the technical mechanics and systematic execution of "${kp}". Derived directly from ${doc.fileName} (${ch.pageRange || 'Module ' + (i + 1)}), students explore the definitions, relationships, and operational requirements necessary for deep comprehension.`,
+      content: `This section addresses the core mechanics and systematic execution of "${kp}". Derived directly from ${doc.fileName} (${ch.pageRange || 'Module ' + (i + 1)}), students explore the definitions, relationships, and operational requirements necessary for deep comprehension.`,
     }));
 
     if (contentSections.length === 0) {
@@ -7042,12 +7069,17 @@ app.post('/api/pdf/:documentId/create-course', authenticateUser, async (req: Req
       id: `ch-${Date.now().toString(36)}-${i + 1}`,
       chapterNumber: i + 1,
       title: ch.title,
-      description: ch.description || `Technical chapter focusing on ${ch.title}.`,
+      description: ch.description || `Chapter focusing on ${ch.title}.`,
       duration: chapterDuration,
-      videoId: recVideo.id || '3T39CMHUS9U',
-      videoTitle: recVideo.title || `${ch.title} Lecture`,
-      videoChannel: recVideo.channel || 'AlphaWave Educational Network',
-      relevanceScore: recVideo.relevanceScore || 96,
+      videoId: recVideo?.id,
+      videoTitle: recVideo?.title,
+      videoChannel: recVideo?.channel,
+      relevanceScore: recVideo?.relevanceScore,
+      videoMatchReason: recVideo?.matchReason,
+      videoSearchQuery,
+      videoStatus,
+      videoMessage,
+      alternativeVideos: altVideos,
       completed: false,
       isUnlocked: i === 0, // ONLY Chapter 1 is unlocked initially!
       content: {
@@ -8670,7 +8702,7 @@ app.post('/api/tutor/chat', authenticateUser, async (req: Request, res: Response
   }
 
   // 1. Try Gemini 3.8 Flash multimodal reasoning with multi-turn history
-  if (!aiResponseText && ai) {
+  if (!aiResponseText && ai && !isGeminiModelOnCooldown('gemini-4-hydrogen')) {
     try {
       const modeInstruction = explanationMode === 'simple'
         ? 'Give an intuitive, crystal-clear explanation using accessible analogies. Break down difficult concepts into plain English without losing technical accuracy.'
@@ -8723,10 +8755,11 @@ ${contextSection}`;
 
       const response = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents,
           config: {
             systemInstruction,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           },
         }),
         8000
@@ -8734,7 +8767,11 @@ ${contextSection}`;
 
       aiResponseText = response.text || '';
     } catch (err: any) {
-      console.warn('[AI Tutor Gemini notice - using pedagogical engine]:', err?.message);
+      if (isGeminiQuotaError(err)) {
+        markGeminiModelCooldown('gemini-4-hydrogen', err);
+      } else {
+        console.info('[AI Tutor Notice - using pedagogical engine]:', err?.message?.slice(0, 140));
+      }
     }
   }
 
@@ -8918,7 +8955,7 @@ app.post('/api/video/analyze', authenticateUser, async (req: Request, res: Respo
 
   let analysisResult: any = null;
 
-  if (ai && validFrames.length > 0) {
+  if (ai && !isGeminiModelOnCooldown('gemini-4-hydrogen') && validFrames.length > 0) {
     try {
       const parts: any[] = [];
 
@@ -9010,10 +9047,11 @@ Respond in JSON conforming to this schema:
 
       const geminiRes = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: parts,
           config: {
             responseMimeType: 'application/json',
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           },
         }),
         25000
@@ -9025,7 +9063,11 @@ Respond in JSON conforming to this schema:
         analysisResult = parsed;
       }
     } catch (aiErr: any) {
-      console.warn('[Gemini Video Analysis Fallback Notice]:', aiErr?.message);
+      if (isGeminiQuotaError(aiErr)) {
+        markGeminiModelCooldown('gemini-4-hydrogen', aiErr);
+      } else {
+        console.info('[Gemini Video Analysis Fallback Notice]:', aiErr?.message?.slice(0, 140));
+      }
     }
   }
 
@@ -9622,8 +9664,19 @@ def process_data(records: list[dict], *args, debug: bool = False, **kwargs) -> l
   }
 
   // Retrieve strictly English-language verified recommended videos matching this exact subject & topic
-  const domainVideos = getDomainPool(analysisResult.subject || analysisResult.specificTopic);
-  const matchedVideos = domainVideos.slice(0, 3);
+  const videoRec = await recommendVideosForChapter(
+    {
+      courseTopic: analysisResult.subject || analysisResult.specificTopic,
+      category: 'Education',
+      chapterTitle: analysisResult.specificTopic || analysisResult.lectureTitle || analysisResult.subject,
+      importantConcepts: analysisResult.keyConcepts || [],
+      language: 'English',
+      limit: 3,
+    },
+    new Set(),
+    { ai, youtubeApiKey: YOUTUBE_API_KEY }
+  );
+  const matchedVideos = videoRec.approvedVideos.slice(0, 3);
 
   const fullAnalysis = {
     id: 'va_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7),
@@ -9657,7 +9710,7 @@ def process_data(records: list[dict], *args, debug: bool = False, **kwargs) -> l
 });
 
 // POST /api/video/create-course - Generate complete interactive course from analyzed video lecture
-app.post('/api/video/create-course', authenticateUser, (req: Request, res: Response) => {
+app.post('/api/video/create-course', authenticateUser, async (req: Request, res: Response) => {
   const user = (req as any).user || DEFAULT_USER;
   const { analysis }: { analysis: any } = req.body;
 
@@ -9666,12 +9719,36 @@ app.post('/api/video/create-course', authenticateUser, (req: Request, res: Respo
   }
 
   const courseId = 'course-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
-  const domainVideos = getDomainPool(analysis.subject);
-  const primaryVideo = analysis.recommendedEnglishVideos?.[0] || domainVideos[0] || {
-    id: '3T39CMHUS9U',
-    title: analysis.lectureTitle,
-    channel: 'Verified Educational Network',
-  };
+
+  const chapterDefinitions = [
+    {
+      title: analysis.specificTopic,
+      description: analysis.detailedSummary?.slice(0, 200) + '...',
+      importantConcepts: Array.isArray(analysis.keyConcepts) ? analysis.keyConcepts : [analysis.specificTopic],
+    },
+    {
+      title: `Advanced Mechanisms & Architectural Depth in ${analysis.subject}`,
+      description: `Deep dive into advanced concepts, schemas, and operational constraints building upon ${analysis.specificTopic}.`,
+      importantConcepts: [analysis.subject, analysis.specificTopic],
+    },
+    {
+      title: `Applied Implementation & Real-World Systems in ${analysis.subject}`,
+      description: `Hands-on synthesis applying ${analysis.subject} principles to real-world workloads.`,
+      importantConcepts: [analysis.subject, 'implementation'],
+    },
+  ];
+
+  const videoRecs = await recommendVideosForCourseChapters(
+    {
+      courseTopic: analysis.subject,
+      category: 'Education',
+      difficulty: 'Intermediate',
+      language: 'English',
+      includeVideo: true,
+      chapters: chapterDefinitions,
+    },
+    { ai, youtubeApiKey: YOUTUBE_API_KEY }
+  );
 
   // Convert practice questions to course assessment format
   const mcqs = (analysis.practiceQuestions || [])
@@ -9693,114 +9770,83 @@ app.post('/api/video/create-course', authenticateUser, (req: Request, res: Respo
       rubric: q.rubric || 'Demonstrate thorough analytical understanding.',
     }));
 
+  const ch1Base: CourseChapter = {
+    id: `ch_${courseId}_1`,
+    chapterNumber: 1,
+    title: analysis.specificTopic,
+    description: analysis.detailedSummary?.slice(0, 200) + '...',
+    duration: analysis.durationFormatted || '25 minutes',
+    completed: false,
+    isUnlocked: true,
+    content: {
+      introduction: analysis.detailedSummary,
+      sections: [
+        {
+          title: `Visual & Theoretical Analysis: ${analysis.specificTopic}`,
+          content: analysis.structuredNotes,
+        },
+      ],
+      keyTakeaways: analysis.keyConcepts || [],
+    },
+    assessment: {
+      mcqs: mcqs.length >= 3 ? mcqs : generateDefaultAssessment(analysis.subject, analysis.specificTopic, 1).mcqs,
+      writingQuestions: writingQuestions.length > 0 ? writingQuestions : [
+        {
+          id: 'written_1',
+          question: `Explain the fundamental architecture and practical importance of ${analysis.specificTopic} in ${analysis.subject}.`,
+          expectedKeyPoints: ['Formal definition', 'Core challenges addressed', 'Real-world application'],
+          rubric: 'Provide clear definitions, diagrams, and theoretical justification.',
+        },
+      ],
+    },
+  };
+
+  const ch2Base: CourseChapter = {
+    id: `ch_${courseId}_2`,
+    chapterNumber: 2,
+    title: chapterDefinitions[1].title,
+    description: chapterDefinitions[1].description,
+    duration: '25 minutes',
+    completed: false,
+    isUnlocked: false,
+    content: {
+      introduction: `Building upon the foundational principles of ${analysis.specificTopic}, this lecture explores advanced structural mechanisms and performance considerations.`,
+      sections: [
+        {
+          title: 'Decomposition and Formal Guarantees',
+          content: 'Analysis of operational trade-offs, formal mathematical proofs, and system reliability guarantees.',
+        },
+      ],
+      keyTakeaways: ['Formal constraints maintain deterministic consistency', 'Modular isolation reduces blast radius'],
+    },
+    assessment: generateDefaultAssessment(analysis.subject, chapterDefinitions[1].title, 2),
+  };
+
+  const ch3Base: CourseChapter = {
+    id: `ch_${courseId}_3`,
+    chapterNumber: 3,
+    title: chapterDefinitions[2].title,
+    description: chapterDefinitions[2].description,
+    duration: '25 minutes',
+    completed: false,
+    isUnlocked: false,
+    content: {
+      introduction: 'Practical case studies evaluating performance, scaling, and fault tolerance in real-world deployments.',
+      sections: [
+        {
+          title: 'Engineering Trade-offs & Production Design',
+          content: 'Benchmarking latency, concurrency management, and reliability strategies.',
+        },
+      ],
+      keyTakeaways: ['Always measure performance under load', 'Enforce strict design contracts'],
+    },
+    assessment: generateDefaultAssessment(analysis.subject, chapterDefinitions[2].title, 3),
+  };
+
   const chapters: CourseChapter[] = [
-    {
-      id: `ch_${courseId}_1`,
-      chapterNumber: 1,
-      title: analysis.specificTopic,
-      description: analysis.detailedSummary?.slice(0, 200) + '...',
-      duration: analysis.durationFormatted || '25 minutes',
-      completed: false,
-      isUnlocked: true,
-      videoId: primaryVideo.id || '3T39CMHUS9U',
-      videoTitle: primaryVideo.title,
-      videoChannel: primaryVideo.channel,
-      relevanceScore: 99,
-      videoMatchReason: `Directly derived from uploaded lecture video analysis of ${analysis.specificTopic}.`,
-      alternativeVideos: domainVideos.slice(1, 4),
-      content: {
-        introduction: analysis.detailedSummary,
-        sections: [
-          {
-            title: `Visual & Theoretical Analysis: ${analysis.specificTopic}`,
-            content: analysis.structuredNotes,
-          },
-        ],
-        keyTakeaways: analysis.keyConcepts || [],
-      },
-      assessment: {
-        mcqs: mcqs.length >= 3 ? mcqs : [
-          {
-            id: 'mcq_1',
-            question: `What is the primary foundation of ${analysis.specificTopic}?`,
-            options: ['Relational integrity', 'Random execution', 'Untyped storage', 'Syntax omission'],
-            correctAnswerIndex: 0,
-            explanation: `The foundational principles of ${analysis.specificTopic} establish systematic integrity.`,
-          },
-          {
-            id: 'mcq_2',
-            question: `Which methodology is emphasized in this lecture on ${analysis.subject}?`,
-            options: ['Modular decomposition and formal constraints', 'Circular dependencies', 'Unindexed heaps', 'Skipping validation'],
-            correctAnswerIndex: 0,
-            explanation: 'Modular decomposition and constraint satisfaction are core principles.',
-          },
-          {
-            id: 'mcq_3',
-            question: 'What milestone confirms conceptual comprehension?',
-            options: ['Passing assessment with >= 75% accuracy', 'Ignoring theoretical foundations', 'Memorizing code without understanding', 'Skipping practical exercises'],
-            correctAnswerIndex: 0,
-            explanation: 'Demonstrating applied conceptual mastery unlocks subsequent modules.',
-          },
-        ],
-        writingQuestions: writingQuestions.length > 0 ? writingQuestions : [
-          {
-            id: 'written_1',
-            question: `Explain the fundamental architecture and practical importance of ${analysis.specificTopic} in ${analysis.subject}.`,
-            expectedKeyPoints: ['Formal definition', 'Anomalies or challenges addressed', 'Real-world application'],
-            rubric: 'Provide clear definitions, diagrams, and theoretical justification.',
-          },
-        ],
-      },
-    },
-    // Progressive chapters 2-5 for complete curriculum
-    {
-      id: `ch_${courseId}_2`,
-      chapterNumber: 2,
-      title: `Advanced Mechanisms & Architectural Depth in ${analysis.subject}`,
-      description: `Deep dive into advanced algorithms, schemas, and operational constraints building upon ${analysis.specificTopic}.`,
-      duration: '25 minutes',
-      completed: false,
-      isUnlocked: false,
-      videoId: domainVideos[1]?.id || 'GFQaEYEc8_8',
-      videoTitle: domainVideos[1]?.title || 'Advanced Lecture',
-      videoChannel: domainVideos[1]?.channel || 'Verified Educational Network',
-      relevanceScore: 98,
-      alternativeVideos: domainVideos.slice(2, 5),
-      content: {
-        introduction: `Building upon the foundational principles of ${analysis.specificTopic}, this lecture explores advanced structural mechanisms and performance considerations.`,
-        sections: [
-          {
-            title: 'Decomposition and Formal Guarantees',
-            content: 'Analysis of operational trade-offs, formal mathematical proofs, and system reliability guarantees.',
-          },
-        ],
-        keyTakeaways: ['Formal constraints maintain deterministic consistency', 'Modular isolation reduces blast radius'],
-      },
-    },
-    {
-      id: `ch_${courseId}_3`,
-      chapterNumber: 3,
-      title: `Applied Engineering & Real-World System Implementations`,
-      description: `Hands-on synthesis applying ${analysis.subject} principles to production-grade distributed workloads.`,
-      duration: '25 minutes',
-      completed: false,
-      isUnlocked: false,
-      videoId: domainVideos[2]?.id || 'wTPW0eWlZ7A',
-      videoTitle: domainVideos[2]?.title || 'System Implementation',
-      videoChannel: domainVideos[2]?.channel || 'Verified Educational Network',
-      relevanceScore: 97,
-      alternativeVideos: domainVideos.slice(0, 3),
-      content: {
-        introduction: 'Practical case studies evaluating performance, scaling, and fault tolerance in enterprise deployments.',
-        sections: [
-          {
-            title: 'Engineering Trade-offs & Production Design',
-            content: 'Benchmarking latency, concurrency management, and disaster recovery strategies.',
-          },
-        ],
-        keyTakeaways: ['Always measure latency under load', 'Enforce strict schema contracts'],
-      },
-    },
+    applyVideoRecommendationToChapter(ch1Base, videoRecs[0], true),
+    applyVideoRecommendationToChapter(ch2Base, videoRecs[1], true),
+    applyVideoRecommendationToChapter(ch3Base, videoRecs[2], true),
   ];
 
   const newCourse: Course = {
@@ -9855,10 +9901,15 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 // Development or Production handler
 async function startServer() {
+  const httpServer = http.createServer(app);
 
   if (!isProduction) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        allowedHosts: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -9870,7 +9921,7 @@ async function startServer() {
     });
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Course Studio server running on http://0.0.0.0:${PORT}`);
   });
 

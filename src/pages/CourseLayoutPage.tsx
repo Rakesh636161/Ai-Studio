@@ -561,21 +561,28 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
                         </span>
                       )}
 
-                      {/* Video recommendation tag with Switch button */}
-                      {chapter.videoId && (
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8150E8] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
-                            <Video className="w-3 h-3" />
-                            <span>{chapter.relevanceScore || 95}% Match</span>
-                          </span>
+                      {/* Video recommendation tag with Switch button or empty-state notice */}
+                      {course.includeVideo && (
+                        chapter.videoId ? (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8150E8] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
+                              <Video className="w-3 h-3" />
+                              <span>{chapter.relevanceScore || 95}% Match</span>
+                            </span>
 
-                          <button
-                            onClick={() => setVideoModalChapter(chapter)}
-                            className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 underline cursor-pointer"
-                          >
-                            Switch Video
-                          </button>
-                        </div>
+                            <button
+                              onClick={() => setVideoModalChapter(chapter)}
+                              className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 underline cursor-pointer"
+                            >
+                              Switch Video
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200">
+                            <Video className="w-3 h-3 shrink-0" />
+                            <span>{chapter.videoMessage || 'No relevant educational videos found for this chapter. Please try again later.'}</span>
+                          </span>
+                        )
                       )}
                     </div>
 
@@ -860,7 +867,7 @@ export const CourseLayoutPage: React.FC<CourseLayoutPageProps> = ({
                   </span>
                 </div>
                 <h4 className="text-xs font-bold text-slate-900">
-                  {videoModalChapter.title}
+                  {videoModalChapter.videoTitle || videoModalChapter.title}
                 </h4>
                 <p className="text-[11px] text-slate-500">
                   Channel: {videoModalChapter.videoChannel || 'Verified Educational Network'}
